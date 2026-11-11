@@ -118,7 +118,7 @@ void Wiimotes::Apply(Runtime& rt,GunState guns[],Pause& pause,PauseInput& pin,in
         }
         lost_[p]=false;
         seen_[p]=true;
-        const auto& profile=settings.player[p];
+        auto& profile=settings.player[p];
         if(p==calibrationPlayer_) {
             if((remote.pressed & profile.buttons[2]) && remote.tracking) {
                 calibrationSamples_[calibrationStep_]=remote.raw;
