@@ -1,0 +1,76 @@
+name: Wiimote native backend
+
+on:
+  push:
+    branches:
+      - feature/native-wiimote-4p
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  windows:
+    name: Windows x64
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure
+        shell: pwsh
+        run: >
+          cmake -S . -B build -G "Visual Studio 17 2022" -A x64
+          -DHOTD_FETCH_SDL3=ON
+          -DHOTD_LOCAL_ICON=OFF
+          -DHOTD_ARCADE_SOUND=OFF
+          -DHOTD_EXPERIMENTAL_MODES=OFF
+      - name: Build
+        run: cmake --build build --config Release --parallel --target hotd hotd_wiimote_test
+      - name: Protocol and calibration tests
+        shell: pwsh
+        run: .\build\Release\hotd_wiimote_test.exe
+
+  linux:
+    name: Linux x86_64
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install SDL build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ninja-build libgl1-mesa-dev libx11-dev libxext-dev libxrandr-dev \
+            libxcursor-dev libxi-dev libxss-dev libxtst-dev libxkbcommon-dev libwayland-dev \
+            libasound2-dev libpulse-dev libdbus-1-dev libudev-dev
+      - name: Configure
+        run: >
+          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
+          -DHOTD_FETCH_SDL3=ON
+          -DHOTD_LOCAL_ICON=OFF
+          -DHOTD_ARCADE_SOUND=OFF
+          -DHOTD_EXPERIMENTAL_MODES=OFF
+          -DHOTD_STATIC_CXX_RUNTIME=OFF
+      - name: Build
+        run: cmake --build build --parallel --target hotd hotd_wiimote_test
+      - name: Protocol and calibration tests
+        run: ./build/hotd_wiimote_test
+
+  macos:
+    name: macOS arm64
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure
+        run: >
+          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
+          -DCMAKE_OSX_ARCHITECTURES=arm64
+          -DCMAKE_OSX_DEPLOYMENT_TARGET=11.0
+          -DHOTD_FETCH_SDL3=ON
+          -DHOTD_LOCAL_ICON=OFF
+          -DHOTD_ARCADE_SOUND=OFF
+          -DHOTD_EXPERIMENTAL_MODES=OFF
+          -DHOTD_STATIC_CXX_RUNTIME=OFF
+      - name: Build
+        run: cmake --build build --parallel --target hotd hotd_wiimote_test
+      - name: Protocol and calibration tests
+        run: ./build/hotd_wiimote_test
