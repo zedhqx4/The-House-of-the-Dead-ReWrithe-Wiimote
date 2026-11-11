@@ -102,6 +102,8 @@ set(HOTD_GAME_SOURCES
     src/game/pause.cpp
     src/game/pads.cpp
     src/game/lightguns.cpp
+    src/game/wiimote_protocol.cpp
+    src/game/wiimote.cpp
     src/game/pads_test.cpp
     src/game/keybinds.cpp
     src/game/pad_prompts.cpp
@@ -351,8 +353,12 @@ target_include_directories(hotd PRIVATE ${CMAKE_CURRENT_BINARY_DIR}/generated)
 configure_file(src/res/hotd_version.h.in ${CMAKE_CURRENT_BINARY_DIR}/generated/hotd_version.h @ONLY)
 target_link_libraries(hotd PRIVATE hotd_engine hotd_logic)
 if(WIN32)
-    target_link_libraries(hotd PRIVATE winhttp)   # util/update_check.cpp
+    target_sources(hotd PRIVATE src/game/wiimote_win.cpp)
+    target_link_libraries(hotd PRIVATE winhttp hid setupapi bthprops)   # util/update_check.cpp and native Wii Remote HID
 endif()
+add_executable(hotd_wiimote_test tests/wiimote_test.cpp src/game/wiimote_protocol.cpp)
+target_include_directories(hotd_wiimote_test PRIVATE src)
+
 # Experimental modes (user 2026-11-03: not in a public release until they are polished; docs/porting.md "Experimental
 # modes"): ON (development builds, build\Release and the private portable): the unreleased modes' menu items, command-line
 # options and High Scores tables. OFF (every release package: tools/make_portable_hotd.ps1 -Release, the GitHub release

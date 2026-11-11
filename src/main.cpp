@@ -89,6 +89,7 @@
 #include "game/preview_art.h"
 #include "game/pause.h"
 #include "game/pads.h"
+#include "game/wiimote.h"
 #include "game/pads_test.h"
 #include "game/keybinds_test.h"
 #include "game/menu_cursor.h"
@@ -6878,6 +6879,8 @@ int main(int argc, char* argv[])
     Gun guns[game::kInputPlayers];   // players 3 / 4: the 4P mode (docs/coop4.md)
     // pads (game/pads.h): gamepads (stick / gyro aim) and light guns (absolute pointer devices) per player
     game::Pads pads;
+    game::Wiimotes wiimotes;
+    wiimotes.Load(cache + "wiimotes.ini");   // native Bluetooth Wii Remotes; disabled unless opted in in this file
     pads.virtualOnly = !inputTestFile.empty() || std::getenv("HOTD_GALLERY_SHOT") || std::getenv("HOTD_JUKEBOX_SHOT") || std::getenv("HOTD_CURSOR_TEST");   // the input test: its own virtual pads only (a real pad plugged in changes nothing)
     game::LightGuns lightGuns;
     gLightGuns = &lightGuns;
@@ -11821,12 +11824,14 @@ int main(int argc, char* argv[])
             padsPending = false;
         }
         pads.refresh();   // pads: hot-plug on every screen
+        wiimotes.Refresh();   // Wiimotes: four independent native HID connections on the platform backend
         // netplay (an online game may start from the menu): no pause on a lost pad; this PC's input slot 0 plays the
         // game's player 1 (host) or 2 (client)
         pads.lostPause = !gNet;
         pads.gamePlayer[0] = gNet ? gNet->localPlayer() : 0;
         pads.gamePlayer[1] = gNet ? (gNet->multi() ? (gNet->secondSeat() > 0 ? gNet->secondSeat() : gNet->localPlayer())
                                      : host.runtime().coop4_on() ? gNet->localPlayer() + 2 : 1 - gNet->localPlayer()) : 1;
+        for (int p = 0; p < game::kInputPlayers; ++p) wiimotes.gamePlayer[p] = pads.gamePlayer[p];
         if (menuAudioHeld && screen != Screen::Menu) {   // left the menu while inactive (the idle -> attract)
             audio.pause(false);
             menuAudioHeld = false;
@@ -14604,6 +14609,7 @@ int main(int argc, char* argv[])
         if (screen == Screen::Game && running && !feAttract && !gScene.active()) {
             pads.apply(rt, guns, pause, pauseIn, lw, lh);
             lightGuns.apply(rt, guns, paused, lw, lh);
+            wiimotes.Apply(rt, guns, pause, pauseIn, lw, lh);
             if (lightGuns.calibrated) {   // a light gun calibrated (F9): kept in launcher.ini
                 lightGuns.calibrated = false;
                 for (int p = 0; p < game::kInputPlayers; ++p)   // (players 3 / 4 too: gun3cal / gun4cal)
