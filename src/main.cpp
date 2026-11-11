@@ -11830,6 +11830,7 @@ int main(int argc, char* argv[])
         }
         pads.refresh();   // pads: hot-plug on every screen
         wiimotes.Refresh();   // Wiimotes: four independent native HID connections on the platform backend
+        if (screen != Screen::Game) wiimotes.ClearEdges();   // menu presses are not carried into the next game
         // netplay (an online game may start from the menu): no pause on a lost pad; this PC's input slot 0 plays the
         // game's player 1 (host) or 2 (client)
         pads.lostPause = !gNet;
@@ -14721,6 +14722,8 @@ int main(int argc, char* argv[])
                     if (SDL_Gamepad* g = pads.padOf(p) ? SDL_GetGamepadFromID(pads.padOf(p)) : nullptr)
                         held = SDL_GetGamepadButton(g, SDL_GAMEPAD_BUTTON_SOUTH) ||
                                SDL_GetGamepadAxis(g, SDL_GAMEPAD_AXIS_RIGHT_TRIGGER) > 16000 || pads.fireHeld(p);   // (padpass: its own fire too)
+                for (int p = 0; p < game::kInputPlayers && !held; ++p)
+                    held = wiimotes.fireHeld(p);
                 const bool scene = cutSceneNow(rt);
                 if (static const bool dbg = std::getenv("HOTD_SKIP_TRACE") != nullptr; dbg && scene && rt.frameCount % 30 == 0)
                     std::printf("frame %llu: skip trace: held %d stale %d fast %d heldS %.2f holdSkip %d reward %d/%d skip_on %u card %u\n",
@@ -15013,7 +15016,7 @@ int main(int argc, char* argv[])
                 g.x = ax;
                 g.y = ay;
                 g.trigger = gp.trigger || gp.reload || edgeReload;
-                g.held = gp.held && !gp.reload;   // (Survival Mode's SMG only)
+                g.held = (gp.held || wiimotes.fireHeld(rt.soloSeat == 1 && p < 2 ? 1 - p : p)) && !gp.reload;   // Survival SMG: mouse / keys / Wii Remote
                 if (p == 0) vrKeyReload = gp.reload;   // (vr: the reload button / key, below)
                 gp.trigger = gp.reload = false;
             }

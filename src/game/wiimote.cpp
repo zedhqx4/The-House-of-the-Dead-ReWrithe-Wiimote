@@ -57,6 +57,14 @@ void Wiimotes::Refresh() {
         if(!fresh.player[p].connected) snapshot_.player[p].pressed=0;
     }
 }
+void Wiimotes::ClearEdges() {
+    for(auto& remote:snapshot_.player) remote.pressed=0;
+}
+bool Wiimotes::fireHeld(int player) const {
+    if(player<0 || player>=kWiimotePlayers || !settings.enabled) return false;
+    const auto& remote=snapshot_.player[player];
+    return remote.connected && (remote.buttons&settings.player[player].buttons[0])!=0;
+}
 void Wiimotes::Apply(Runtime& rt,GunState guns[],Pause& pause,PauseInput& pin,int width,int height) {
     if(!settings.enabled) return;
     const bool paused=pause.paused();
@@ -67,7 +75,6 @@ void Wiimotes::Apply(Runtime& rt,GunState guns[],Pause& pause,PauseInput& pin,in
             if(seen_[p] && !lost_[p] && mode==4 && playerState(rt,gamePlayer[p])==5 && !paused)
                 pause.focus(false);
             lost_[p]=true;
-            guns[p].held=false;
             remote.pressed=0;
             continue;
         }
@@ -112,7 +119,6 @@ void Wiimotes::Apply(Runtime& rt,GunState guns[],Pause& pause,PauseInput& pin,in
             }
         }
         // Retain the held state for game modes which support hold-to-skip / automatic fire.
-        guns[p].held=(down&profile.buttons[0])!=0;
         remote.pressed=0;
     }
 }

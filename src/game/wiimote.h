@@ -86,6 +86,8 @@ public:
     void Disconnect(int player);
     void SwapPlayers();
     void Refresh();
+    void ClearEdges();
+    bool fireHeld(int player) const;
     void Apply(Runtime& runtime, GunState guns[], Pause& pause, PauseInput& pauseInput, int width, int height);
     const wii::Snapshot& Status() const { return snapshot_; }
 
