@@ -110,6 +110,7 @@ void Wiimotes::Apply(Runtime& rt,GunState guns[],Pause& pause,PauseInput& pin,in
     for(int p=0;p<kWiimotePlayers;++p) {
         auto& remote=snapshot_.player[p];
         if(!remote.connected || !remote.reserved) {
+            if(p==calibrationPlayer_) CancelCalibration();
             if(lostPause && seen_[p] && !lost_[p] && mode==4 && playerState(rt,gamePlayer[p])==5 && !paused)
                 pause.focus(false);
             lost_[p]=true;

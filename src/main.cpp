@@ -14651,6 +14651,13 @@ int main(int argc, char* argv[])
             pads.apply(rt, guns, pause, pauseIn, lw, lh);
             lightGuns.apply(rt, guns, paused, lw, lh);
             wiimotes.Apply(rt, guns, pause, pauseIn, lw, lh);
+            if (wiimotes.calibrated) {
+                wiimotes.calibrated = false;
+                if (!wiimotes.Save(cache + "wiimotes.ini"))
+                    SDL_Log("wiimotes: could not save calibration to wiimotes.ini");
+                else
+                    SDL_Log("wiimotes: calibration saved");
+            }
             if (lightGuns.calibrated) {   // a light gun calibrated (F9): kept in launcher.ini
                 lightGuns.calibrated = false;
                 for (int p = 0; p < game::kInputPlayers; ++p)   // (players 3 / 4 too: gun3cal / gun4cal)
