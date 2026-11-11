@@ -11197,7 +11197,7 @@ int main(int argc, char* argv[])
                                     [&, p]() { return wiimoteStatus(p); },
                                     [&, p]() { wiimotePlayerPage(p); },
                                     "Connection, infrared tracking, aim calibration and smoothing for this player."});
-                    if (p >= 2) experimental(rows);
+                    if (p >= 2) rows.back().experimental = []() { return true; };
                 }
                 fe.extras = std::move(rows);
                 fe.extrasTitle = "Wii Remotes";
@@ -11963,7 +11963,7 @@ int main(int argc, char* argv[])
             // works in the launcher, front end, attract / end screens and text-entry overlays without SDL gamepad emulation.
             static uint16_t previousWiiMenu = 0;
             uint16_t currentWiiMenu = 0;
-            if (!wiimotes.Calibrating())
+            if (!wiimotes.MenuInputSuppressed())
                 for (const auto& remote : wiimotes.Status().player)
                     if (remote.connected) currentWiiMenu |= remote.buttons;
             struct WiiMenuKey { uint16_t button; SDL_Scancode scan; SDL_Keycode key; };

@@ -95,8 +95,9 @@ public:
     // The host draws the targets on the current menu and calls CaptureCalibration every frame.
     bool StartCalibration(int player);
     void CaptureCalibration();
-    void CancelCalibration() { calibrationPlayer_ = -1; }
+    void CancelCalibration();
     bool Calibrating() const { return calibrationPlayer_ >= 0; }
+    bool MenuInputSuppressed() const { return Calibrating() || calibrationMenuBlockedPlayer_ >= 0; }
     bool CalibrationTarget(float& x, float& y) const;
     std::vector<std::string> CalibrationLines() const;
     bool calibrated = false; // main saves wiimotes.ini after a profile completes calibration
@@ -110,7 +111,7 @@ private:
     std::array<bool,kWiimotePlayers> seen_{};
     std::array<wii::AimPoint,kWiimotePlayers> smoothedAim_{};
     std::array<bool,kWiimotePlayers> hasAim_{};
-    int calibrationPlayer_ = -1, calibrationStep_ = 0;
+    int calibrationPlayer_ = -1, calibrationStep_ = 0, calibrationMenuBlockedPlayer_ = -1;
     std::array<wii::AimPoint,4> calibrationSamples_{};
     std::array<bool,kWiimotePlayers> calibrationConsumed_{};
     bool calibrationFailed_ = false;

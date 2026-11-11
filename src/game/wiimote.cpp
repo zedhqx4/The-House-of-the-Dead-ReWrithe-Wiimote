@@ -75,11 +75,22 @@ bool Wiimotes::StartCalibration(int player) {
     calibrationStep_=0;
     calibrationFailed_=false;
     calibrationConsumed_.fill(false);
+    if(!(remote.buttons&wii::B)) calibrationMenuBlockedPlayer_=-1;
     snapshot_.player[player].pressed=0;
     return true;
 }
+void Wiimotes::CancelCalibration() {
+    if(calibrationPlayer_>=0) calibrationMenuBlockedPlayer_=calibrationPlayer_;
+    calibrationPlayer_=-1;
+    calibrationStep_=0;
+}
 void Wiimotes::CaptureCalibration() {
     calibrationConsumed_.fill(false);
+    if(calibrationMenuBlockedPlayer_>=0) {
+        const auto& blocked=snapshot_.player[calibrationMenuBlockedPlayer_];
+        if(!blocked.connected || !(blocked.buttons&wii::B))
+            calibrationMenuBlockedPlayer_=-1;
+    }
     if(calibrationPlayer_<0) return;
     auto& remote=snapshot_.player[calibrationPlayer_];
     if(!remote.connected || !remote.reserved) {
@@ -95,6 +106,7 @@ void Wiimotes::CaptureCalibration() {
             if(calibration.Fit(calibrationSamples_)) {
                 calibrated=true;
                 calibrationFailed_=false;
+                calibrationMenuBlockedPlayer_=calibrationPlayer_;
                 calibrationPlayer_=-1;
                 calibrationStep_=0;
             } else {
@@ -128,7 +140,7 @@ std::vector<std::string> Wiimotes::CalibrationLines() const {
 
 bool Wiimotes::fireHeld(int player) const {
     if(player<0 || player>=kWiimotePlayers || !settings.enabled) return false;
-    if(player==calibrationPlayer_ || calibrationConsumed_[player]) return false;
+    if(player==calibrationPlayer_ || player==calibrationMenuBlockedPlayer_ || calibrationConsumed_[player]) return false;
     const auto& remote=snapshot_.player[player];
     return remote.connected && (remote.buttons&settings.player[player].buttons[0])!=0;
 }
@@ -149,7 +161,7 @@ void Wiimotes::Apply(Runtime& rt,GunState guns[],Pause& pause,PauseInput& pin,in
         lost_[p]=false;
         seen_[p]=true;
         auto& profile=settings.player[p];
-        if(p==calibrationPlayer_ || calibrationConsumed_[p]) {
+        if(p==calibrationPlayer_ || p==calibrationMenuBlockedPlayer_ || calibrationConsumed_[p]) {
             remote.pressed=0;
             continue; // calibration input must never become in-game shots / reloads
         }
