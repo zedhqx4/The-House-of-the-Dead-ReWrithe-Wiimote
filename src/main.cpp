@@ -11700,12 +11700,12 @@ int main(int argc, char* argv[])
     bool netStart2 = false;  // the 4-seat game online: this PC's second seat's start (input slot 1)
     // pads: a pad's / gun's start button as the keys' (netplay: this PC's start through the lockstep; a lost pad: the
     // message only, no pause)
-    pads.onJoin = lightGuns.onJoin = [&](int p) {
+    pads.onJoin = lightGuns.onJoin = wiimotes.onJoin = [&](int p) {
         if (gNet && host.runtime().coop4_on() && p == 1) netStart2 = true;   // (p: the input slot)
         else if (gNet) netStart = true;
         else host.runtime().player_join(p);
     };
-    pads.lostPause = !gNet;
+    pads.lostPause = wiimotes.lostPause = !gNet;
     if (screen == Screen::Launcher && arrow)
         SDL_SetCursor(arrow);
     // setup (user 2026-10-31: "a small fixed-size window about the size of the reference", the 1998 CD's Auto Run

@@ -77,6 +77,7 @@ public:
 
     wii::Settings settings;
     int gamePlayer[kWiimotePlayers] = {0,1,2,3};
+    bool lostPause = true;
     std::function<void(int)> onJoin;
 
     bool Load(const std::string& file);
