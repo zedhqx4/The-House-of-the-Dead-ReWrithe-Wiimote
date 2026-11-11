@@ -14351,8 +14351,12 @@ int main(int argc, char* argv[])
                     pauseKey = pauseKey || cfg.keys[p].has(game::kActPause, sc);
                 // the PC's pause (0x41ADF0): Escape / P open and close it in play; while paused the arrows / keypad 8 2
                 // pick the item, Enter / keypad Enter / Space activate it (the players' keys are not read meanwhile)
-                if (lightGuns.calibrating() && sc == SDL_SCANCODE_ESCAPE)   // pads: Esc ends the light-gun calibration
+                if (wiimotes.Calibrating() && sc == SDL_SCANCODE_ESCAPE)
+                    wiimotes.CancelCalibration();
+                else if (lightGuns.calibrating() && sc == SDL_SCANCODE_ESCAPE)   // pads: Esc ends the light-gun calibration
                     lightGuns.cancelCalibration();
+                else if (sc == SDL_SCANCODE_F10 && !paused && wiimotes.StartCalibration())
+                    SDL_Log("wiimotes: four-point IR calibration started");
                 else if (sc == SDL_SCANCODE_F9 && lightGuns.active() && !paused)   // pads: the light-gun calibration
                     lightGuns.startCalibration();
                 else if (sc == SDL_SCANCODE_ESCAPE || (pauseKey && !rt.name_entry_active()))   // (the name entry types P)
@@ -15223,7 +15227,7 @@ int main(int argc, char* argv[])
             if (skipFast && !cutSceneNow(rt))   // the skipped scene is over: the game's pace again from here
                 break;
         }
-        if (paused || sceneHold || lightGuns.calibrating() || now > next + 4 * frameNs || skipFast)
+        if (paused || sceneHold || lightGuns.calibrating() || wiimotes.Calibrating() || now > next + 4 * frameNs || skipFast)
             next = now;
         if (inputTest)
             inputTest(1, rt, lw, lh);   // --input-test: this frame's checks
@@ -15462,7 +15466,11 @@ int main(int argc, char* argv[])
             {
                 std::vector<std::string> note = pads.notice();
                 float tu, tv;
-                if (lightGuns.calibrationTarget(tu, tv)) {
+                if (wiimotes.CalibrationTarget(tu, tv)) {
+                    note = wiimotes.CalibrationLines();
+                    padTarget.setText({"\\ | /", "- + -", "/ | \\"}, wh >= 720 ? 4 : 3);
+                    padTarget.drawAt(ww, wh, tu * ww, tv * wh);
+                } else if (lightGuns.calibrationTarget(tu, tv)) {
                     note = lightGuns.calibrationLines();
                     padTarget.setText({"\\ | /", "- + -", "/ | \\"}, wh >= 720 ? 4 : 3);
                     padTarget.drawAt(ww, wh, tu * ww, tv * wh);

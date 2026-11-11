@@ -8,6 +8,7 @@
 #include <functional>
 #include <memory>
 #include <string>
+#include <vector>
 
 namespace hotd::game {
 struct GunState;
@@ -89,6 +90,14 @@ public:
     void Refresh();
     void ClearEdges();
     bool fireHeld(int player) const;
+
+    // Four-point IR calibration: press the player's Confirm button at each displayed target.
+    bool StartCalibration();
+    void CancelCalibration() { calibrationPlayer_ = -1; }
+    bool Calibrating() const { return calibrationPlayer_ >= 0; }
+    bool CalibrationTarget(float& x, float& y) const;
+    std::vector<std::string> CalibrationLines() const;
+    bool calibrated = false; // main saves wiimotes.ini after a profile completes calibration
     void Apply(Runtime& runtime, GunState guns[], Pause& pause, PauseInput& pauseInput, int width, int height);
     const wii::Snapshot& Status() const { return snapshot_; }
 
@@ -99,5 +108,8 @@ private:
     std::array<bool,kWiimotePlayers> seen_{};
     std::array<wii::AimPoint,kWiimotePlayers> smoothedAim_{};
     std::array<bool,kWiimotePlayers> hasAim_{};
+    int calibrationPlayer_ = -1, calibrationStep_ = 0;
+    std::array<wii::AimPoint,4> calibrationSamples_{};
+    bool calibrationFailed_ = false;
 };
 } // namespace hotd::game

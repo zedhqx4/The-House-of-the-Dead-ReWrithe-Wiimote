@@ -4,6 +4,7 @@
 #include "game/runtime.h"
 #include <algorithm>
 #include <cmath>
+#include <string>
 
 namespace hotd::game {
 namespace {
@@ -66,6 +67,37 @@ void Wiimotes::Refresh() {
 void Wiimotes::ClearEdges() {
     for(auto& remote:snapshot_.player) remote.pressed=0;
 }
+bool Wiimotes::StartCalibration() {
+    calibrationPlayer_ = -1;
+    calibrationStep_ = 0;
+    calibrationFailed_ = false;
+    for(int p=0;p<kWiimotePlayers;++p) {
+        const auto& remote=snapshot_.player[p];
+        if(remote.connected && remote.reserved) { calibrationPlayer_=p; break; }
+    }
+    return calibrationPlayer_ >= 0;
+}
+bool Wiimotes::CalibrationTarget(float& x,float& y) const {
+    if(calibrationPlayer_ < 0) return false;
+    static constexpr float targets[4][2]={{.15f,.15f},{.85f,.15f},{.85f,.85f},{.15f,.85f}};
+    x=targets[calibrationStep_][0];
+    y=targets[calibrationStep_][1];
+    return true;
+}
+std::vector<std::string> Wiimotes::CalibrationLines() const {
+    if(calibrationPlayer_ < 0) return {};
+    static const char* names[4]={"top left","top right","bottom right","bottom left"};
+    std::vector<std::string> lines={
+        "WII REMOTE CALIBRATION",
+        "",
+        "Player "+std::to_string(calibrationPlayer_+1)+": point at the "+names[calibrationStep_]+" target",
+        "Press + when both IR dots are visible"
+    };
+    if(calibrationFailed_) lines.push_back("Calibration geometry invalid; repeat the four points");
+    lines.push_back("Esc: cancel");
+    return lines;
+}
+
 bool Wiimotes::fireHeld(int player) const {
     if(player<0 || player>=kWiimotePlayers || !settings.enabled) return false;
     const auto& remote=snapshot_.player[player];
@@ -87,6 +119,23 @@ void Wiimotes::Apply(Runtime& rt,GunState guns[],Pause& pause,PauseInput& pin,in
         lost_[p]=false;
         seen_[p]=true;
         const auto& profile=settings.player[p];
+        if(p==calibrationPlayer_) {
+            if((remote.pressed & profile.buttons[2]) && remote.tracking) {
+                calibrationSamples_[calibrationStep_]=remote.raw;
+                if(++calibrationStep_==4) {
+                    if(profile.calibration.Fit(calibrationSamples_)) {
+                        calibrated=true;
+                        calibrationFailed_=false;
+                        calibrationPlayer_=-1;
+                    } else {
+                        calibrationStep_=0;
+                        calibrationFailed_=true;
+                    }
+                }
+            }
+            remote.pressed=0;
+            continue; // calibration presses must never become in-game shots / reloads
+        }
         wii::AimPoint aim=remote.raw;
         if(profile.calibration.calibrated)
             profile.calibration.Apply(remote.raw,aim);
