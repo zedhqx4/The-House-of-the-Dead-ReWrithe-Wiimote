@@ -11,6 +11,7 @@
 #include <chrono>
 #include <condition_variable>
 #include <cstring>
+#include <initializer_list>
 #include <memory>
 #include <mutex>
 #include <set>
@@ -36,6 +37,13 @@ std::string StringProperty(IOHIDDeviceRef device,CFStringRef key) {
     if(!CFStringGetCString((CFStringRef)value,text,sizeof(text),kCFStringEncodingUTF8)) return {};
     return text;
 }
+std::string DeviceId(IOHIDDeviceRef device) {
+    const auto serial=StringProperty(device,CFSTR(kIOHIDSerialNumberKey));
+    if(!serial.empty()) return serial;
+    const int location=NumberProperty(device,CFSTR(kIOHIDLocationIDKey));
+    if(location>0) return std::to_string(location);
+    return std::to_string(CFHash(device));
+}
 bool IsRemote(IOHIDDeviceRef device) {
     const int vendor=NumberProperty(device,CFSTR(kIOHIDVendorIDKey));
     const int product=NumberProperty(device,CFSTR(kIOHIDProductIDKey));
@@ -48,8 +56,7 @@ public:
     std::atomic<int> player{0};
     explicit Device(IOHIDDeviceRef d,int slot):device(d),player(slot) {
         if(device) CFRetain(device);
-        key=StringProperty(device,CFSTR(kIOHIDSerialNumberKey));
-        if(key.empty()) key=std::to_string(NumberProperty(device,CFSTR(kIOHIDLocationIDKey)));
+        key=DeviceId(device);
     }
     ~Device() {
         stop=true;
@@ -262,8 +269,7 @@ private:
             if(!scan) continue;
             auto found=HidDevices();
             for(auto device:found) {
-                const auto serial=StringProperty(device,CFSTR(kIOHIDSerialNumberKey));
-                const std::string id=serial.empty()?std::to_string(NumberProperty(device,CFSTR(kIOHIDLocationIDKey))):serial;
+                const std::string id=DeviceId(device);
                 int slot=-1;
                 {
                     std::lock_guard lock(mutex);

@@ -24,7 +24,7 @@ For development, HOTD_WII_REMOTES=1 enables support and requests a scan for that
 - macOS: the backend reads the Nintendo HID interface through IOKit. Pair the remote in macOS Bluetooth settings first; then enable support in wiimotes.ini.
 - Android/Quest: native Wiimote transport is not implemented; normal game inputs are unchanged.
 
-A powered infrared sensor bar is required for native pointing. The backend does not emulate a mouse or SDL gamepad. MotionPlus, extension devices and speaker audio are not used.
+Linux device access also requires the logged-in user to have read/write permission for the matching hidraw node (the distribution's udev/input group policy). A powered infrared sensor bar is required for native pointing. The backend does not emulate a mouse or SDL gamepad. MotionPlus, extension devices and speaker audio are not used.
 
 ## Four players
 

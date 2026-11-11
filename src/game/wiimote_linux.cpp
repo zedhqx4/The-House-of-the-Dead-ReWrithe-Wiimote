@@ -58,7 +58,7 @@ public:
     std::atomic<int> player{0};
     explicit Device(std::string p,std::string id,int slot)
         :path(std::move(p)),key(std::move(id)),player(slot){}
-    ~Device(){stop=true;if(thread.joinable())thread.join();}
+    ~Device(){stop=true;if(thread.joinable())thread.join();if(fd>=0)close(fd);}
     bool Open() {
         fd=open(path.c_str(),O_RDWR|O_NONBLOCK|O_CLOEXEC);
         if(fd<0 || !IsRemote(fd)) return false;
@@ -66,10 +66,12 @@ public:
         if(!Write(request,sizeof(request))) return false;
         uint8_t report[64]{};
         pollfd pfd{fd,POLLIN,0};
+        bool responded=false;
         if(::poll(&pfd,1,700)>0) {
             const ssize_t n=read(fd,report,sizeof(report));
-            if(n>0) DecodeReport(report,size_t(n),state);
+            if(n>0) responded=DecodeReport(report,size_t(n),state);
         }
+        if(!responded) return false;
         state.connected=state.reserved=true;
         state.pressed=0;
         alive=true;

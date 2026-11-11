@@ -78,10 +78,20 @@ void Wiimotes::Apply(Runtime& rt,GunState guns[],Pause& pause,PauseInput& pin,in
         if(profile.calibration.calibrated)
             profile.calibration.Apply(remote.raw,aim);
         if(remote.tracking) {
+            const float alpha=profile.smoothing==0?1.0f:profile.smoothing==1?0.65f:0.35f;
+            if(!hasAim_[p]) {
+                smoothedAim_[p]=aim;
+                hasAim_[p]=true;
+            } else {
+                smoothedAim_[p].x+=alpha*(aim.x-smoothedAim_[p].x);
+                smoothedAim_[p].y+=alpha*(aim.y-smoothedAim_[p].y);
+            }
             const float margin=float(height)*0.05f;
-            guns[p].x=std::clamp(float(aim.x)*float(width),-margin,float(width)+margin);
-            guns[p].y=std::clamp(float(aim.y)*float(height),-margin,float(height)+margin);
+            guns[p].x=std::clamp(float(smoothedAim_[p].x)*float(width),-margin,float(width)+margin);
+            guns[p].y=std::clamp(float(smoothedAim_[p].y)*float(height),-margin,float(height)+margin);
             guns[p].pointer=false;
+        } else {
+            hasAim_[p]=false;
         }
 
         const uint16_t down=remote.buttons;

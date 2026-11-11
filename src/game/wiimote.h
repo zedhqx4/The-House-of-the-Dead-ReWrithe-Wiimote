@@ -94,5 +94,7 @@ private:
     wii::Snapshot snapshot_;
     std::array<bool,kWiimotePlayers> lost_{};
     std::array<bool,kWiimotePlayers> seen_{};
+    std::array<wii::AimPoint,kWiimotePlayers> smoothedAim_{};
+    std::array<bool,kWiimotePlayers> hasAim_{};
 };
 } // namespace hotd::game
