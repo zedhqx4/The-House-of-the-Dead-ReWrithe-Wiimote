@@ -106,7 +106,8 @@ public:
     std::string BindingText(int player, int action) const;
     bool MenuPointer(float& x, float& y, int* player = nullptr);
     bool bindingChanged = false;
-    bool MenuInputSuppressed() const { return Calibrating() || calibrationMenuBlockedPlayer_ >= 0 || bindingPlayer_ >= 0; }
+    bool MenuInputSuppressed() const { return Calibrating() || calibrationMenuBlockedPlayer_ >= 0 ||
+        bindingPlayer_ >= 0 || bindingMenuBlockedPlayer_ >= 0; }
     bool CalibrationTarget(float& x, float& y) const;
     std::vector<std::string> CalibrationLines() const;
     bool calibrated = false; // main saves wiimotes.ini after a profile completes calibration
@@ -123,6 +124,8 @@ private:
     std::array<wii::AimPoint,kWiimotePlayers> menuAim_{};
     std::array<bool,kWiimotePlayers> hasMenuAim_{};
     int bindingPlayer_ = -1, bindingAction_ = -1, bindingMessagePlayer_ = -1, bindingMessageAction_ = -1;
+    int bindingMenuBlockedPlayer_ = -1;
+    uint16_t bindingMenuBlockedButton_ = 0;
     std::string bindingMessage_;
     int calibrationPlayer_ = -1, calibrationStep_ = 0, calibrationMenuBlockedPlayer_ = -1;
     std::array<wii::AimPoint,4> calibrationSamples_{};

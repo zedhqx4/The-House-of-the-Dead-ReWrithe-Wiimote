@@ -153,6 +153,13 @@ bool Wiimotes::BeginBinding(int player,int action) {
 }
 
 void Wiimotes::CaptureBinding() {
+    if(bindingMenuBlockedPlayer_>=0) {
+        const auto& blocked=snapshot_.player[bindingMenuBlockedPlayer_];
+        if(!blocked.connected || !(blocked.buttons&bindingMenuBlockedButton_)) {
+            bindingMenuBlockedPlayer_=-1;
+            bindingMenuBlockedButton_=0;
+        }
+    }
     if(bindingPlayer_<0) return;
     auto& remote=snapshot_.player[bindingPlayer_];
     if(!remote.connected || !remote.reserved) {
@@ -175,6 +182,8 @@ void Wiimotes::CaptureBinding() {
             return;
         }
         bindingMessage_=std::string("Bound: ")+wii::ButtonName(button);
+        bindingMenuBlockedPlayer_=bindingPlayer_;
+        bindingMenuBlockedButton_=button;
         bindingPlayer_=bindingAction_=-1;
         bindingChanged=true;
         remote.pressed=0;
