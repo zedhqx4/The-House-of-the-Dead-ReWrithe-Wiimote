@@ -91,7 +91,7 @@ std::vector<std::string> Wiimotes::CalibrationLines() const {
         "WII REMOTE CALIBRATION",
         "",
         "Player "+std::to_string(calibrationPlayer_+1)+": point at the "+names[calibrationStep_]+" target",
-        "Press + when both IR dots are visible"
+        "Press B when both IR dots are visible"
     };
     if(calibrationFailed_) lines.push_back("Calibration geometry invalid; repeat the four points");
     lines.push_back("Esc: cancel");
@@ -121,7 +121,7 @@ void Wiimotes::Apply(Runtime& rt,GunState guns[],Pause& pause,PauseInput& pin,in
         seen_[p]=true;
         auto& profile=settings.player[p];
         if(p==calibrationPlayer_) {
-            if((remote.pressed & profile.buttons[2]) && remote.tracking) {
+            if((remote.pressed & wii::B) && remote.tracking) {
                 calibrationSamples_[calibrationStep_]=remote.raw;
                 if(++calibrationStep_==4) {
                     if(profile.calibration.Fit(calibrationSamples_)) {
