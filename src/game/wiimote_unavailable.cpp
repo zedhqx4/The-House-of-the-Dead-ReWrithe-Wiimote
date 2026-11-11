@@ -7,6 +7,7 @@ public:
     void Scan() override {}
     void Disconnect(int) override {}
     void SwapPlayers() override {}
+    void SetRumble(int,bool) override {}
     Snapshot Poll() override {
         Snapshot s;
         s.message="Native Wii Remote support is not available on this platform";

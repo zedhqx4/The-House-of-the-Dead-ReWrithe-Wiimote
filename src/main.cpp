@@ -11210,6 +11210,13 @@ int main(int argc, char* argv[])
                                     saveWiimotes();
                                     fe.screenExtras();
                                 }, "Enable or disable the native Bluetooth / HID Wii Remote backend."});
+                rows.push_back({"Rumble", [&]() {
+                                    return wiimotes.settings.rumble ? std::string("On") : std::string("Off");
+                                }, [&, saveWiimotes]() {
+                                    wiimotes.settings.rumble = !wiimotes.settings.rumble;
+                                    saveWiimotes();
+                                    fe.screenExtras();
+                                }, "Basic vibration on shots and reloads. Turn it off to reduce Wii Remote battery use."});
                 rows.push_back({"Scan for Remotes", [&]() {
                                     return wiimotes.Status().scanning ? std::string("Searching...") : std::string("Scan");
                                 }, [&, saveWiimotes]() {
@@ -12009,15 +12016,15 @@ int main(int argc, char* argv[])
                     if (!remote.connected || !remote.reserved) continue;
                     currentWiiMenu |= remote.buttons & uint16_t(game::wii::Up | game::wii::Down |
                                                                  game::wii::Left | game::wii::Right);
-                    // B accepts. With IR tracking, the same press clicks the item under this remote's cursor.
-                    if (remote.buttons & game::wii::B) {
+                    // A accepts. With IR tracking, the same press clicks the item under this remote's cursor.
+                    if (remote.buttons & game::wii::A) {
                         if (wiimoteMenuPointer && p == wiimoteMenuPointerPlayer)
-                            wiimoteMenuClick = (remote.pressed & game::wii::B) != 0;
+                            wiimoteMenuClick = (remote.pressed & game::wii::A) != 0;
                         else
                             currentWiiMenu |= kWiiMenuConfirm;
                     }
-                    // A backs out. HOME, +, and the profile's gameplay action bindings do not drive menu navigation.
-                    if (remote.buttons & game::wii::A)
+                    // B backs out. HOME, +, and the profile's gameplay action bindings do not drive menu navigation.
+                    if (remote.buttons & game::wii::B)
                         currentWiiMenu |= kWiiMenuBack;
                 }
             }

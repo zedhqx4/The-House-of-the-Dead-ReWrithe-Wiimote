@@ -88,11 +88,13 @@ public:
         state.pressed=0;
         return r;
     }
+    void SetRumble(bool enabled) { rumbleRequested.store(enabled,std::memory_order_relaxed); }
 private:
     int fd=-1;
     std::thread thread;
     std::mutex mutex;
     Remote state;
+    std::atomic<bool> rumbleRequested{false};
     bool Write(const uint8_t* bytes,size_t size) {
         if(fd<0 || size>64) return false;
         uint8_t report[64]{};
@@ -118,11 +120,16 @@ private:
     void Run() {
         if(!InitIR()) {alive=false;return;}
         auto last=Clock::now(),statusAt=last;
-        int led=-1;
+        int led=-1;bool rumbling=false;
         while(!stop) {
             if(led!=player) {
                 led=player;
                 if(!Send({0x11,uint8_t(0x10<<led)})) break;
+            }
+            const bool wantRumble=rumbleRequested.load(std::memory_order_relaxed);
+            if(wantRumble!=rumbling) {
+                if(!Send({0x10,uint8_t(wantRumble?1:0)})) break;
+                rumbling=wantRumble;
             }
             pollfd pfd{fd,POLLIN,0};
             const int ready=::poll(&pfd,1,10);
@@ -149,6 +156,7 @@ private:
                 statusAt=now;
             }
         }
+        if(rumbling) Send({0x10,0});
         Send({0x11,0});
         alive=false;
     }
@@ -179,6 +187,12 @@ public:
         std::lock_guard lock(mutex);
         std::swap(devices[0],devices[1]);std::swap(keys[0],keys[1]);
         for(int i=0;i<kPlayers;++i) if(devices[i]) devices[i]->player=i;
+    }
+    void SetRumble(int p,bool enabled) override {
+        if(p<0 || p>=kPlayers) return;
+        std::shared_ptr<Device> device;
+        {std::lock_guard lock(mutex);device=devices[p];}
+        if(device) device->SetRumble(enabled);
     }
     Snapshot Poll() override {
         std::lock_guard lock(mutex);

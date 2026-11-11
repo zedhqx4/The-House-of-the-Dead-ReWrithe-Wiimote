@@ -86,6 +86,7 @@ bool Settings::Load(const std::string& file) {
         int number=0;
         if(key=="enabled" && v>>number) loaded.enabled=number==1;
         else if(key=="continuous" && v>>number) loaded.continuous=number==1;
+        else if(key=="rumble" && v>>number) loaded.rumble=number!=0;
         for(int p=0;p<kPlayers;++p) {
             const auto prefix="p"+std::to_string(p+1)+".";
             auto& profile=loaded.player[p];
@@ -118,7 +119,7 @@ bool Settings::Load(const std::string& file) {
 bool Settings::Save(const std::string& file) const {
     std::ofstream f(file,std::ios::trunc);
     if(!f) return false;
-    f<<"enabled="<<enabled<<"\ncontinuous="<<continuous<<'\n'<<std::setprecision(12);
+    f<<"enabled="<<enabled<<"\ncontinuous="<<continuous<<"\nrumble="<<rumble<<'\n'<<std::setprecision(12);
     for(int p=0;p<kPlayers;++p) {
         const auto prefix="p"+std::to_string(p+1)+".";
         const auto& profile=player[p];

@@ -3,6 +3,7 @@
 #pragma once
 
 #include <array>
+#include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <functional>
@@ -40,7 +41,7 @@ struct Profile {
 };
 bool AssignButton(Profile& profile, int action, uint16_t button);
 struct Settings {
-    bool enabled=false, continuous=false;
+    bool enabled=false, continuous=false, rumble=true;
     std::array<Profile,kPlayers> player;
     bool Load(const std::string& file);
     bool Save(const std::string& file) const;
@@ -66,6 +67,7 @@ public:
     virtual void Scan()=0;
     virtual void Disconnect(int player)=0;
     virtual void SwapPlayers()=0;
+    virtual void SetRumble(int player, bool enabled)=0;
     virtual Snapshot Poll()=0;
 };
 std::unique_ptr<Backend> CreateBackend();
@@ -123,6 +125,9 @@ private:
     std::array<bool,kWiimotePlayers> hasAim_{};
     std::array<wii::AimPoint,kWiimotePlayers> menuAim_{};
     std::array<bool,kWiimotePlayers> hasMenuAim_{};
+    std::array<std::chrono::steady_clock::time_point,kWiimotePlayers> rumbleUntil_{};
+    std::array<bool,kWiimotePlayers> rumbleActive_{};
+    void PulseRumble(int player, int durationMs);
     int bindingPlayer_ = -1, bindingAction_ = -1, bindingMessagePlayer_ = -1, bindingMessageAction_ = -1;
     int bindingMenuBlockedPlayer_ = -1;
     uint16_t bindingMenuBlockedButton_ = 0;

@@ -51,6 +51,8 @@ void Wiimotes::SwapPlayers() {
     std::swap(seen_[0],seen_[1]);
     std::swap(smoothedAim_[0],smoothedAim_[1]);
     std::swap(hasAim_[0],hasAim_[1]);
+    std::swap(rumbleUntil_[0],rumbleUntil_[1]);
+    std::swap(rumbleActive_[0],rumbleActive_[1]);
 }
 void Wiimotes::Refresh() {
     if(!backend_) return;
@@ -63,9 +65,25 @@ void Wiimotes::Refresh() {
         snapshot_.player[p].pressed|=pending;
         if(!fresh.player[p].connected) snapshot_.player[p].pressed=0;
     }
+    const auto now=std::chrono::steady_clock::now();
+    for(int p=0;p<kWiimotePlayers;++p) {
+        const bool want=settings.enabled && settings.rumble && snapshot_.player[p].connected &&
+                        now<rumbleUntil_[p];
+        if(!want) rumbleUntil_[p]={};
+        if(want!=rumbleActive_[p]) {
+            backend_->SetRumble(p,want);
+            rumbleActive_[p]=want;
+        }
+    }
 }
 void Wiimotes::ClearEdges() {
     for(auto& remote:snapshot_.player) remote.pressed=0;
+}
+void Wiimotes::PulseRumble(int player,int durationMs) {
+    if(player<0 || player>=kWiimotePlayers || durationMs<=0 || !settings.enabled || !settings.rumble)
+        return;
+    const auto until=std::chrono::steady_clock::now()+std::chrono::milliseconds(std::clamp(durationMs,1,250));
+    if(until>rumbleUntil_[player]) rumbleUntil_[player]=until;
 }
 bool Wiimotes::StartCalibration(int player) {
     if(player<0 || player>=kWiimotePlayers || !settings.enabled) return false;
@@ -297,8 +315,14 @@ void Wiimotes::Apply(Runtime& rt,GunState guns[],Pause& pause,PauseInput& pin,in
             pin.activate=pin.activate || ((edge&profile.buttons[2])!=0) || ((edge&profile.buttons[0])!=0);
             pin.toggle=pin.toggle || ((edge&profile.buttons[3])!=0) || ((edge&wii::Minus)!=0);
         } else {
-            if(edge&profile.buttons[0]) guns[p].trigger=true;
-            if(edge&profile.buttons[1]) guns[p].reload=true;
+            if(edge&profile.buttons[0]) {
+                guns[p].trigger=true;
+                PulseRumble(p,24);
+            }
+            if(edge&profile.buttons[1]) {
+                guns[p].reload=true;
+                PulseRumble(p,48);
+            }
             if(edge&profile.buttons[3]) {
                 const int gp=gamePlayer[p];
                 if(mode==4 && playerState(rt,gp)==5) pin.toggle=true;

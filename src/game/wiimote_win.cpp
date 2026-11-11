@@ -75,11 +75,13 @@ public:
         alive=true;thread=std::thread([this]{Run();});return true;
     }
     Remote Poll(){std::lock_guard lock(mutex);Remote r=state;r.connected=alive;r.reserved=true;state.pressed=0;return r;}
+    void SetRumble(bool enabled){rumbleRequested.store(enabled,std::memory_order_relaxed);}
 private:
     Handle handle;
     std::thread thread;
     std::mutex mutex;
     Remote state;
+    std::atomic<bool> rumbleRequested{false};
     size_t inputLength=22,outputLength=22;
     bool Send(std::initializer_list<uint8_t> bytes){return Write(handle.value,bytes.begin(),bytes.size(),outputLength);}
     bool InitIR(){
@@ -96,10 +98,15 @@ private:
     void Run(){
         if(!InitIR()){alive=false;return;}
         Handle event(CreateEventW(nullptr,TRUE,FALSE,nullptr));if(!event){alive=false;return;}
-        auto last=Clock::now(),statusAt=last;int led=-1;
+        auto last=Clock::now(),statusAt=last;int led=-1;bool rumbling=false;
         uint8_t report[64]{};DWORD bytes=0;OVERLAPPED ov{};ov.hEvent=event.value;bool pending=false;
         while(!stop){
             if(led!=player){led=player;if(!Send({0x11,uint8_t(0x10<<led)}))break;}
+            const bool wantRumble=rumbleRequested.load(std::memory_order_relaxed);
+            if(wantRumble!=rumbling){
+                if(!Send({0x10,uint8_t(wantRumble?1:0)}))break;
+                rumbling=wantRumble;
+            }
             if(!pending){
                 ResetEvent(event.value);bytes=0;
                 BOOL ok=ReadFile(handle.value,report,DWORD(inputLength),&bytes,&ov);
@@ -125,7 +132,8 @@ private:
             if(now-statusAt>std::chrono::seconds(10)){if(!Send({0x15,0}))break;statusAt=now;}
         }
         if(pending){CancelIoEx(handle.value,&ov);GetOverlappedResult(handle.value,&ov,&bytes,TRUE);}
-        Send({0x11,0}); // release our player light and stop rumble; leave Windows pairing intact
+        if(rumbling) Send({0x10,0});
+        Send({0x11,0}); // release our player light; leave Windows pairing intact
         alive=false;
     }
 };
@@ -190,6 +198,12 @@ public:
     void SwapPlayers()override{
         std::lock_guard lock(mutex);std::swap(devices[0],devices[1]);std::swap(paths[0],paths[1]);
         for(int i=0;i<kPlayers;++i)if(devices[i])devices[i]->player=i;
+    }
+    void SetRumble(int p,bool enabled)override{
+        if(p<0 || p>=kPlayers)return;
+        std::shared_ptr<Device> device;
+        {std::lock_guard lock(mutex);device=devices[p];}
+        if(device)device->SetRumble(enabled);
     }
     Snapshot Poll()override{
         std::lock_guard lock(mutex);Snapshot s;s.scanning=scanning;s.message=message;

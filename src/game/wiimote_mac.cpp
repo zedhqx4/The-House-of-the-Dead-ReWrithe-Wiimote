@@ -76,11 +76,13 @@ public:
         state.pressed=0;
         return r;
     }
+    void SetRumble(bool enabled) { rumbleRequested.store(enabled,std::memory_order_relaxed); }
 private:
     IOHIDDeviceRef device=nullptr;
     std::thread thread;
     std::mutex mutex;
     Remote state;
+    std::atomic<bool> rumbleRequested{false};
     std::array<uint8_t,64> reportBuffer{};
     std::atomic<int64_t> lastReportNs{0};
     static void Input(void* context,IOReturn result,void*,IOHIDReportType,uint32_t reportId,uint8_t* data,CFIndex length) {
@@ -136,11 +138,16 @@ private:
         auto last=Clock::now(),statusAt=last;
         lastReportNs.store(std::chrono::duration_cast<std::chrono::nanoseconds>(
             last.time_since_epoch()).count(),std::memory_order_relaxed);
-        int led=-1;
+        int led=-1;bool rumbling=false;
         while(!stop) {
             if(led!=player) {
                 led=player;
                 if(!Send({0x11,uint8_t(0x10<<led)})) break;
+            }
+            const bool wantRumble=rumbleRequested.load(std::memory_order_relaxed);
+            if(wantRumble!=rumbling) {
+                if(!Send({0x10,uint8_t(wantRumble?1:0)})) break;
+                rumbling=wantRumble;
             }
             CFRunLoopRunInMode(kCFRunLoopDefaultMode,0.01,true);
             const auto now=Clock::now();
@@ -158,6 +165,7 @@ private:
                 state.buttons=state.pressed=0;
             }
         }
+        if(rumbling) Send({0x10,0});
         Send({0x11,0});
         IOHIDDeviceUnscheduleFromRunLoop(device,CFRunLoopGetCurrent(),kCFRunLoopDefaultMode);
         IOHIDDeviceClose(device,kIOHIDOptionsTypeNone);
@@ -221,6 +229,12 @@ public:
         std::lock_guard lock(mutex);
         std::swap(devices[0],devices[1]);std::swap(keys[0],keys[1]);
         for(int i=0;i<kPlayers;++i) if(devices[i]) devices[i]->player=i;
+    }
+    void SetRumble(int p,bool enabled) override {
+        if(p<0 || p>=kPlayers) return;
+        std::shared_ptr<Device> device;
+        {std::lock_guard lock(mutex);device=devices[p];}
+        if(device) device->SetRumble(enabled);
     }
     Snapshot Poll() override {
         std::lock_guard lock(mutex);
