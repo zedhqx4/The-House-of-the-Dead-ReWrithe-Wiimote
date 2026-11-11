@@ -30,15 +30,15 @@ jobs:
         run: cmake --build build --config Release --parallel --target hotd hotd_viewer hotd_launch hotd_wiimote_test
       - name: Protocol and calibration tests
         shell: pwsh
-        run: .\\build\\Release\\hotd_wiimote_test.exe
+        run: .\build\Release\hotd_wiimote_test.exe
       - name: Package portable build
         shell: pwsh
         run: |
-          $out = Join-Path $env:GITHUB_WORKSPACE "pkg\\HOTD ReWrithe"
-          powershell -NoProfile -ExecutionPolicy Bypass -File tools\\make_portable_hotd.ps1 -Build build -Out $out -NoBuild
+          $out = Join-Path $env:GITHUB_WORKSPACE "pkg\HOTD ReWrithe"
+          powershell -NoProfile -ExecutionPolicy Bypass -File tools\make_portable_hotd.ps1 -Build build -Out $out -NoBuild
           if ($LASTEXITCODE -ne 0) { throw "packaging failed" }
-          New-Item -ItemType Directory -Force (Join-Path $env:GITHUB_WORKSPACE "pkg\\docs") | Out-Null
-          Copy-Item docs\\wiimotes.md (Join-Path $env:GITHUB_WORKSPACE "pkg\\docs\\WIIMOTES.txt")
+          New-Item -ItemType Directory -Force (Join-Path $env:GITHUB_WORKSPACE "pkg\docs") | Out-Null
+          Copy-Item docs\wiimotes.md (Join-Path $env:GITHUB_WORKSPACE "pkg\docs\WIIMOTES.txt")
       - uses: actions/upload-artifact@v4
         with:
           name: windows-x64-wiimote
@@ -57,8 +57,8 @@ jobs:
       - name: Install SDL build dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y ninja-build libgl1-mesa-dev libx11-dev libxext-dev libxrandr-dev \\
-            libxcursor-dev libxi-dev libxss-dev libxtst-dev libxkbcommon-dev libwayland-dev \\
+          sudo apt-get install -y ninja-build libgl1-mesa-dev libx11-dev libxext-dev libxrandr-dev \
+            libxcursor-dev libxi-dev libxss-dev libxtst-dev libxkbcommon-dev libwayland-dev \
             libasound2-dev libpulse-dev libdbus-1-dev libudev-dev
       - name: Configure
         run: >
