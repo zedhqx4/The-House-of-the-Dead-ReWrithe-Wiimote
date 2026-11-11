@@ -79,7 +79,7 @@ int main() {
     std::remove(path.c_str());
 
     const std::string legacyPath="wiimote-legacy-test.ini";
-    { std::ofstream legacy(legacyPath); legacy<<"p1.buttons=4 8 4096 128\\n"; }
+    { std::ofstream legacy(legacyPath); legacy<<"p1.buttons=4 8 4096 128\n"; }
     Settings migrated;
     Check(migrated.Load(legacyPath),"load previous default settings");
     Check(migrated.player[0].buttons==std::array<uint16_t,4>{B,A,One,Plus},
