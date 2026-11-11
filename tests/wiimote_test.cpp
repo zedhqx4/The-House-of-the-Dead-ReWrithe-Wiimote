@@ -53,6 +53,8 @@ int main() {
               "calibration maps each sample to its target");
     }
 
+    Settings defaults;
+    Check(defaults.rumble,"rumble is enabled by default");
     Settings settings;
     settings.enabled=true;
     settings.continuous=true;

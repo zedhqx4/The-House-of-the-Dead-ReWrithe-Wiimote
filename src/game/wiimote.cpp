@@ -322,11 +322,11 @@ void Wiimotes::Apply(Runtime& rt,GunState guns[],Pause& pause,PauseInput& pin,in
         } else {
             if(edge&profile.buttons[0]) {
                 guns[p].trigger=true;
-                PulseRumble(p,24);
+                PulseRumble(p,90);
             }
             if(edge&profile.buttons[1]) {
                 guns[p].reload=true;
-                PulseRumble(p,48);
+                PulseRumble(p,130);
             }
             if(edge&profile.buttons[3]) {
                 const int gp=gamePlayer[p];
