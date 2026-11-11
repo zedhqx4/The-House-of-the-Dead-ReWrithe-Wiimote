@@ -11131,12 +11131,12 @@ int main(int argc, char* argv[])
                                     const int battery = wiimotes.Status().player[p].battery;
                                     return battery < 0 ? std::string("Unknown") : std::to_string(battery) + "%";
                                 }, nullptr, "Battery level reported by the Wii Remote."});
-                static const char* const wiimoteActions[] = {"Fire Button", "Reload Button", "Confirm Button", "Pause Button"};
+                static const char* const wiimoteActions[] = {"Fire Button", "Reload Button", "Confirm Button", "Start / Pause Button"};
                 static const char* const wiimoteActionHelp[] = {
                     "Choose the Wii Remote button that fires this player's weapon.",
                     "Choose the Wii Remote button that reloads this player's weapon.",
                     "Choose the button that confirms menu and pause-menu selections.",
-                    "Choose the button that opens or closes the in-game pause menu."
+                    "Choose the button that exits the boot attract, joins / continues while waiting, and opens or closes the in-game pause menu."
                 };
                 for (int action = 0; action < 4; ++action) {
                     rows.push_back({wiimoteActions[action], [&, p, action]() {
@@ -12003,6 +12003,28 @@ int main(int argc, char* argv[])
         const bool wiimoteMenuPointer = screen == Screen::Menu &&
             wiimotes.MenuPointer(wiimoteMenuX, wiimoteMenuY, &wiimoteMenuPointerPlayer);
         bool wiimoteMenuClick = false;
+        if (screen == Screen::Game && feAttract && !wiimotes.MenuInputSuppressed()) {
+            bool startPressed = false;
+            for (int p = 0; p < game::kWiimotePlayers; ++p) {
+                const auto& remote = wiimotes.Status().player[p];
+                if (!remote.connected || !remote.reserved) continue;
+                const uint16_t startButton = wiimotes.settings.player[p].buttons[3];
+                if (remote.pressed & startButton) {
+                    startPressed = true;
+                    break;
+                }
+            }
+            if (startPressed) {
+                SDL_Event start{};
+                start.type = SDL_EVENT_KEY_DOWN;
+                start.key.windowID = SDL_GetWindowID(window);
+                start.key.scancode = SDL_SCANCODE_RETURN;
+                start.key.key = SDLK_RETURN;
+                start.key.down = true;
+                SDL_PushEvent(&start); // same "Press Start" / leave-attract path as a gamepad Start
+                wiimotes.ClearEdges();
+            }
+        }
         if (screen != Screen::Game) {
             // Translate each remote's own profile to frontend navigation. The IR pointer below is injected as
             // FrontendInput coordinates, never as SDL mouse motion or an operating-system cursor.

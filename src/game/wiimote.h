@@ -127,6 +127,9 @@ private:
     std::array<bool,kWiimotePlayers> hasMenuAim_{};
     std::array<std::chrono::steady_clock::time_point,kWiimotePlayers> rumbleUntil_{};
     std::array<bool,kWiimotePlayers> rumbleActive_{};
+    std::array<int,kWiimotePlayers> rumbleLives_{}, rumbleScore_{};
+    std::array<uint32_t,kWiimotePlayers> rumbleReloads_{};
+    std::array<bool,kWiimotePlayers> rumbleSeen_{};
     void PulseRumble(int player, int durationMs);
     int bindingPlayer_ = -1, bindingAction_ = -1, bindingMessagePlayer_ = -1, bindingMessageAction_ = -1;
     int bindingMenuBlockedPlayer_ = -1;

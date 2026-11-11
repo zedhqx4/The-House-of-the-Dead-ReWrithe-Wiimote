@@ -53,6 +53,10 @@ void Wiimotes::SwapPlayers() {
     std::swap(hasAim_[0],hasAim_[1]);
     std::swap(rumbleUntil_[0],rumbleUntil_[1]);
     std::swap(rumbleActive_[0],rumbleActive_[1]);
+    std::swap(rumbleLives_[0],rumbleLives_[1]);
+    std::swap(rumbleScore_[0],rumbleScore_[1]);
+    std::swap(rumbleReloads_[0],rumbleReloads_[1]);
+    std::swap(rumbleSeen_[0],rumbleSeen_[1]);
 }
 void Wiimotes::Refresh() {
     if(!backend_) return;
@@ -82,7 +86,7 @@ void Wiimotes::ClearEdges() {
 void Wiimotes::PulseRumble(int player,int durationMs) {
     if(player<0 || player>=kWiimotePlayers || durationMs<=0 || !settings.enabled || !settings.rumble)
         return;
-    const auto until=std::chrono::steady_clock::now()+std::chrono::milliseconds(std::clamp(durationMs,1,250));
+    const auto until=std::chrono::steady_clock::now()+std::chrono::milliseconds(std::clamp(durationMs,1,500));
     if(until>rumbleUntil_[player]) rumbleUntil_[player]=until;
 }
 bool Wiimotes::StartCalibration(int player) {
@@ -273,12 +277,16 @@ bool Wiimotes::fireHeld(int player) const {
     return remote.connected && (remote.buttons&settings.player[player].buttons[0])!=0;
 }
 void Wiimotes::Apply(Runtime& rt,GunState guns[],Pause& pause,PauseInput& pin,int width,int height) {
-    if(!settings.enabled) return;
+    if(!settings.enabled) {
+        rumbleSeen_.fill(false);
+        return;
+    }
     const bool paused=pause.paused();
     const int mode=gameMode(rt);
     for(int p=0;p<kWiimotePlayers;++p) {
         auto& remote=snapshot_.player[p];
         if(!remote.connected || !remote.reserved) {
+            rumbleSeen_[p]=false;
             if(p==calibrationPlayer_) CancelCalibration();
             if(lostPause && seen_[p] && !lost_[p] && mode==4 && playerState(rt,gamePlayer[p])==5 && !paused)
                 pause.focus(false);
@@ -320,14 +328,8 @@ void Wiimotes::Apply(Runtime& rt,GunState guns[],Pause& pause,PauseInput& pin,in
             pin.activate=pin.activate || ((edge&profile.buttons[2])!=0) || ((edge&profile.buttons[0])!=0);
             pin.toggle=pin.toggle || ((edge&profile.buttons[3])!=0) || ((edge&wii::Minus)!=0);
         } else {
-            if(edge&profile.buttons[0]) {
-                guns[p].trigger=true;
-                PulseRumble(p,90);
-            }
-            if(edge&profile.buttons[1]) {
-                guns[p].reload=true;
-                PulseRumble(p,130);
-            }
+            if(edge&profile.buttons[0]) guns[p].trigger=true;
+            if(edge&profile.buttons[1]) guns[p].reload=true;
             if(edge&profile.buttons[3]) {
                 const int gp=gamePlayer[p];
                 if(mode==4 && playerState(rt,gp)==5) pin.toggle=true;
@@ -337,6 +339,39 @@ void Wiimotes::Apply(Runtime& rt,GunState guns[],Pause& pause,PauseInput& pin,in
         }
         // Retain the held state for game modes which support hold-to-skip / automatic fire.
         remote.pressed=0;
+    }
+
+    // Mirror the game's native feedback triggers from Pads::apply, not input-button presses.
+    // The Wii Remote has a binary motor, so use the same event and duration without intensity.
+    for(int p=0;p<kWiimotePlayers;++p) {
+        const auto& remote=snapshot_.player[p];
+        if(!remote.connected || !remote.reserved) {
+            rumbleSeen_[p]=false;
+            continue;
+        }
+        const int gp=gamePlayer[p];
+        const uint32_t rec=Runtime::player_rec(gp);
+        const int lives=int32_t(rt.mem.u32(rec+0x0C));
+        const int score=int32_t(rt.mem.u32(rec+0x08));
+        const uint32_t reloads=rt.reloadsIn[gp];
+        if(!rumbleSeen_[p]) {
+            rumbleLives_[p]=lives;
+            rumbleScore_[p]=score;
+            rumbleReloads_[p]=reloads;
+            rumbleSeen_[p]=true;
+            continue;
+        }
+        if(settings.rumble && playerState(rt,gp)==5) {
+            if(lives<rumbleLives_[p])
+                PulseRumble(p,300);       // took damage
+            else if(score>rumbleScore_[p])
+                PulseRumble(p,70);        // hit an enemy
+            else if(reloads!=rumbleReloads_[p])
+                PulseRumble(p,90);         // game registered a reload
+        }
+        rumbleLives_[p]=lives;
+        rumbleScore_[p]=score;
+        rumbleReloads_[p]=reloads;
     }
 }
 

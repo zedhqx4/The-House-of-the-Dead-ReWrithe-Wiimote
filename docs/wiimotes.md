@@ -15,9 +15,9 @@ The feature is opt-in. Create wiimotes.ini in ReWrithe's settings folder:
     p4.smoothing=1
     p1.buttons=4 8 4096 128
 
-The global `rumble` setting defaults to on; set `rumble=0` or turn **Rumble** off in Options > Controls > Wii Remotes to disable it. The Wii Remote gives short rumble pulses on shots and reloads.
+The global `rumble` setting defaults to on; set `rumble=0` or turn **Rumble** off in Options > Controls > Wii Remotes to disable it. Vibration follows the game's existing feedback events: taking damage (300 ms), hitting an enemy (70 ms), and a registered reload (90 ms). It does not vibrate merely because Fire or Reload was pressed. The Wii Remote has an on/off motor, so gamepad intensity levels are not available.
 
-The four values on each pN.buttons line are the gameplay actions Fire, Reload, Confirm and Pause, in that order. The default is B = fire, A = reload, + = confirm and HOME = pause. The player page in Options > Controls > Wii Remotes lets you select an action and press the new Wii Remote button. Each physical button can be assigned to only one of the four actions for that player. continuous=1 keeps the backend searching while support is enabled; continuous=0 performs a 20-second search after the backend is asked to scan.
+The four values on each pN.buttons line are the gameplay actions Fire, Reload, Confirm and Start / Pause, in that order. The default is B = fire, A = reload, + = confirm and HOME = Start / Pause. HOME exits the boot attract to the menu, joins / continues while the player is waiting, and opens / closes the in-game pause menu. The player page in Options > Controls > Wii Remotes lets you select an action and press the new Wii Remote button. Each physical button can be assigned to only one of the four actions for that player. continuous=1 keeps the backend searching while support is enabled; continuous=0 performs a 20-second search after the backend is asked to scan.
 
 For development, HOTD_WII_REMOTES=1 enables support and requests a scan for that run.
 
@@ -28,7 +28,7 @@ For development, HOTD_WII_REMOTES=1 enables support and requests a scan for that
 - macOS: the backend reads the Nintendo HID interface through IOKit. Pair the remote in macOS Bluetooth settings first; then enable support in wiimotes.ini.
 - Android/Quest: native Wiimote transport is not implemented; normal game inputs are unchanged.
 
-Linux device access also requires the logged-in user to have read/write permission for the matching hidraw node (the distribution's udev/input group policy). A powered infrared sensor bar is required for native pointing. In the front-end menus, the IR aim moves ReWrithe's own hand cursor; **A** clicks the focused item under that cursor and **B** goes back. Menu navigation is separate from the remappable gameplay actions (**B** fire, **A** reload, **+** confirm and **HOME** pause by default). This does not move or emulate the operating-system mouse. MotionPlus, extension devices and speaker audio are not used.
+Linux device access also requires the logged-in user to have read/write permission for the matching hidraw node (the distribution's udev/input group policy). A powered infrared sensor bar is required for native pointing. In the front-end menus, the IR aim moves ReWrithe's own hand cursor; **A** clicks the focused item under that cursor and **B** goes back. Menu navigation is separate from the remappable gameplay actions (**B** fire, **A** reload, **+** confirm and **HOME** Start / Pause by default). This does not move or emulate the operating-system mouse. MotionPlus, extension devices and speaker audio are not used.
 
 ## Four players
 
