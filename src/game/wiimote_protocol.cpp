@@ -7,6 +7,28 @@
 
 namespace hotd::game::wii {
 
+const char* ButtonName(uint16_t button) {
+    switch(button) {
+        case B: return "B";
+        case A: return "A";
+        case Plus: return "+";
+        case Home: return "HOME";
+        case One: return "1";
+        case Two: return "2";
+        case Minus: return "-";
+        default: return "Unknown";
+    }
+}
+
+bool AssignButton(Profile& profile,int action,uint16_t button) {
+    if(action<0 || action>=int(profile.buttons.size()) ||
+       std::find(Bindable.begin(),Bindable.end(),button)==Bindable.end()) return false;
+    for(int i=0;i<int(profile.buttons.size());++i)
+        if(i!=action && profile.buttons[i]==button) return false;
+    profile.buttons[size_t(action)]=button;
+    return true;
+}
+
 bool AimCalibration::Apply(AimPoint p, AimPoint& out) const {
     const double z=h[6]*p.x+h[7]*p.y+h[8];
     if (!std::isfinite(z) || std::abs(z)<1e-8) return false;

@@ -56,6 +56,10 @@ int main() {
     Settings settings;
     settings.enabled=true;
     settings.continuous=true;
+    settings.player[0].buttons={A,B,One,Minus};
+    Check(AssignButton(settings.player[0],2,Two),"assign a unique remapped action button");
+    Check(!AssignButton(settings.player[0],0,Two),"reject a duplicate action binding");
+    Check(std::string(ButtonName(Plus))=="+","name Wii Remote buttons for the setup menu");
     settings.player[2].buttons={One,Two,Plus,Home};
     settings.player[3].smoothing=2;
     const std::string path="wiimote-test.ini";
@@ -63,6 +67,7 @@ int main() {
     Settings loaded;
     Check(loaded.Load(path),"load four-player settings");
     Check(loaded.enabled && loaded.continuous,"restore support settings");
+    Check(loaded.player[0].buttons==settings.player[0].buttons,"restore remapped P1 action bindings");
     Check(loaded.player[2].buttons==settings.player[2].buttons,"restore P3 bindings");
     Check(loaded.player[3].smoothing==2,"restore P4 settings");
     std::remove(path.c_str());

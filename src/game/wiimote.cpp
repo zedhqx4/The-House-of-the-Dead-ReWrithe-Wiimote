@@ -138,6 +138,102 @@ std::vector<std::string> Wiimotes::CalibrationLines() const {
     return lines;
 }
 
+bool Wiimotes::BeginBinding(int player,int action) {
+    if(player<0 || player>=kWiimotePlayers || action<0 || action>=4 || !settings.enabled) return false;
+    const auto& remote=snapshot_.player[player];
+    if(!remote.connected || !remote.reserved) return false;
+    bindingPlayer_=player;
+    bindingAction_=action;
+    bindingMessagePlayer_=player;
+    bindingMessageAction_=action;
+    bindingMessage_.clear();
+    bindingChanged=false;
+    snapshot_.player[player].pressed=0;
+    return true;
+}
+
+void Wiimotes::CaptureBinding() {
+    if(bindingPlayer_<0) return;
+    auto& remote=snapshot_.player[bindingPlayer_];
+    if(!remote.connected || !remote.reserved) {
+        bindingMessage_="Remote disconnected";
+        bindingPlayer_=bindingAction_=-1;
+        remote.pressed=0;
+        return;
+    }
+    for(const uint16_t button:wii::Bindable) {
+        if(!(remote.pressed&button)) continue;
+        auto& profile=settings.player[bindingPlayer_];
+        if(!wii::AssignButton(profile,bindingAction_,button)) {
+            static const char* const names[]={"Fire","Reload","Confirm","Pause"};
+            int other=-1;
+            for(int i=0;i<4;++i)
+                if(i!=bindingAction_ && profile.buttons[i]==button) { other=i; break; }
+            bindingMessage_=other>=0 ? std::string("Already used by ")+names[other] :
+                                       std::string("Button unavailable");
+            remote.pressed=0;
+            return;
+        }
+        bindingMessage_=std::string("Bound: ")+wii::ButtonName(button);
+        bindingPlayer_=bindingAction_=-1;
+        bindingChanged=true;
+        remote.pressed=0;
+        return;
+    }
+}
+
+void Wiimotes::CancelBinding() {
+    if(bindingPlayer_>=0 && bindingPlayer_<kWiimotePlayers)
+        snapshot_.player[bindingPlayer_].pressed=0;
+    bindingPlayer_=bindingAction_=-1;
+    bindingMessage_.clear();
+    bindingMessagePlayer_=bindingMessageAction_=-1;
+}
+
+bool Wiimotes::BindingActive(int player,int action) const {
+    return bindingPlayer_==player && bindingAction_==action;
+}
+
+std::string Wiimotes::BindingText(int player,int action) const {
+    if(BindingActive(player,action))
+        return bindingMessage_.empty() ? std::string("Press a button...") : bindingMessage_;
+    if(bindingMessagePlayer_==player && bindingMessageAction_==action && !bindingMessage_.empty())
+        return bindingMessage_;
+    if(player<0 || player>=kWiimotePlayers || action<0 || action>=4) return "Unknown";
+    return wii::ButtonName(settings.player[player].buttons[action]);
+}
+
+bool Wiimotes::MenuPointer(float& x,float& y,int* player) {
+    if(!settings.enabled || MenuInputSuppressed()) {
+        hasMenuAim_.fill(false);
+        return false;
+    }
+    for(int p=0;p<kWiimotePlayers;++p) {
+        const auto& remote=snapshot_.player[p];
+        if(!remote.connected || !remote.reserved || !remote.tracking) {
+            hasMenuAim_[p]=false;
+            continue;
+        }
+        wii::AimPoint aim=remote.raw;
+        const auto& profile=settings.player[p];
+        if(profile.calibration.calibrated)
+            profile.calibration.Apply(remote.raw,aim);
+        const float alpha=profile.smoothing==0?1.0f:profile.smoothing==1?0.65f:0.35f;
+        if(!hasMenuAim_[p]) {
+            menuAim_[p]=aim;
+            hasMenuAim_[p]=true;
+        } else {
+            menuAim_[p].x+=alpha*(aim.x-menuAim_[p].x);
+            menuAim_[p].y+=alpha*(aim.y-menuAim_[p].y);
+        }
+        x=float(std::clamp(menuAim_[p].x,0.0,1.0));
+        y=float(std::clamp(menuAim_[p].y,0.0,1.0));
+        if(player) *player=p;
+        return true; // The frontend draws its own hand cursor; no SDL / OS mouse is generated.
+    }
+    return false;
+}
+
 bool Wiimotes::fireHeld(int player) const {
     if(player<0 || player>=kWiimotePlayers || !settings.enabled) return false;
     if(player==calibrationPlayer_ || player==calibrationMenuBlockedPlayer_ || calibrationConsumed_[player]) return false;

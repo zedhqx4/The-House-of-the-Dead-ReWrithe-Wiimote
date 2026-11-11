@@ -11131,6 +11131,28 @@ int main(int argc, char* argv[])
                                     const int battery = wiimotes.Status().player[p].battery;
                                     return battery < 0 ? std::string("Unknown") : std::to_string(battery) + "%";
                                 }, nullptr, "Battery level reported by the Wii Remote."});
+                static const char* const wiimoteActions[] = {"Fire Button", "Reload Button", "Confirm Button", "Pause Button"};
+                static const char* const wiimoteActionHelp[] = {
+                    "Choose the Wii Remote button that fires this player's weapon.",
+                    "Choose the Wii Remote button that reloads this player's weapon.",
+                    "Choose the button that confirms menu and pause-menu selections.",
+                    "Choose the button that opens or closes the in-game pause menu."
+                };
+                for (int action = 0; action < 4; ++action) {
+                    rows.push_back({wiimoteActions[action], [&, p, action]() {
+                                        return wiimotes.BindingText(p, action);
+                                    }, [&, p, action]() {
+                                        if (!wiimotes.BeginBinding(p, action))
+                                            SDL_Log("wiimotes: Player %d is not connected; cannot remap %s", p + 1,
+                                                    wiimoteActions[action]);
+                                        fe.screenExtras();
+                                    }, wiimoteActionHelp[action]});
+                    rows.back().off = [&, p]() {
+                        const auto& remote = wiimotes.Status().player[p];
+                        return remote.connected && remote.reserved ? std::string() :
+                               std::string("Connect this player's Wii Remote first");
+                    };
+                }
                 rows.push_back({"Aim Calibration", [&, p]() {
                                     return wiimotes.settings.player[p].calibration.calibrated ? std::string("Set") :
                                                                                                  std::string("Default");
@@ -11172,7 +11194,10 @@ int main(int argc, char* argv[])
                 fe.extras = std::move(rows);
                 fe.extrasTitle = "Wii Remote: Player " + std::to_string(p + 1);
                 fe.extrasTab = -1;
-                fe.extrasExit = [&]() { wiimotePage(); };
+                fe.extrasExit = [&]() {
+                    wiimotes.CancelBinding();
+                    wiimotePage();
+                };
                 fe.screenExtras();
             };
             wiimotePage = [&, saveWiimotes, wiimoteStatus]() {
@@ -11951,6 +11976,14 @@ int main(int argc, char* argv[])
         pads.refresh();   // pads: hot-plug on every screen
         wiimotes.Refresh();   // Wiimotes: four independent native HID connections on the platform backend
         wiimotes.CaptureCalibration();   // menu and game alike: B captures the selected player's IR target
+        wiimotes.CaptureBinding();       // the selected player/action captures the next supported Wii Remote button
+        if (wiimotes.bindingChanged) {
+            wiimotes.bindingChanged = false;
+            if (!wiimotes.Save(cache + "wiimotes.ini"))
+                SDL_Log("wiimotes: could not save Wii Remote button bindings");
+            else
+                SDL_Log("wiimotes: button bindings saved");
+        }
         if (wiimotes.calibrated) {
             wiimotes.calibrated = false;
             if (!wiimotes.Save(cache + "wiimotes.ini"))
@@ -11958,22 +11991,45 @@ int main(int argc, char* argv[])
             else
                 SDL_Log("wiimotes: calibration saved");
         }
+        float wiimoteMenuX = 0.5f, wiimoteMenuY = 0.5f;
+        int wiimoteMenuPointerPlayer = -1;
+        const bool wiimoteMenuPointer = screen == Screen::Menu &&
+            wiimotes.MenuPointer(wiimoteMenuX, wiimoteMenuY, &wiimoteMenuPointerPlayer);
+        bool wiimoteMenuClick = false;
         if (screen != Screen::Game) {
-            // Menus consume ordinary SDL key events. Translate held Wii Remote buttons here so the same navigation
-            // works in the launcher, front end, attract / end screens and text-entry overlays without SDL gamepad emulation.
+            // Translate each remote's own profile to frontend navigation. The IR pointer below is injected as
+            // FrontendInput coordinates, never as SDL mouse motion or an operating-system cursor.
+            static constexpr uint16_t kWiiMenuConfirm = 0x2000, kWiiMenuPause = 0x4000, kWiiMenuBack = 0x8000;
             static uint16_t previousWiiMenu = 0;
             uint16_t currentWiiMenu = 0;
-            if (!wiimotes.MenuInputSuppressed())
-                for (const auto& remote : wiimotes.Status().player)
-                    if (remote.connected) currentWiiMenu |= remote.buttons;
+            if (!wiimotes.MenuInputSuppressed()) {
+                for (int p = 0; p < game::kWiimotePlayers; ++p) {
+                    const auto& remote = wiimotes.Status().player[p];
+                    if (!remote.connected || !remote.reserved) continue;
+                    const auto& bindings = wiimotes.settings.player[p].buttons;
+                    currentWiiMenu |= remote.buttons & uint16_t(game::wii::Up | game::wii::Down |
+                                                                 game::wii::Left | game::wii::Right);
+                    if (remote.buttons & bindings[2]) {
+                        if (wiimoteMenuPointer && p == wiimoteMenuPointerPlayer)
+                            wiimoteMenuClick = (remote.pressed & bindings[2]) != 0;
+                        else
+                            currentWiiMenu |= kWiiMenuConfirm;
+                    }
+                    if (remote.buttons & bindings[3]) currentWiiMenu |= kWiiMenuPause;
+                    // B remains the familiar menu Back button unless the user assigned it to Confirm or Pause.
+                    if ((remote.buttons & game::wii::B) && bindings[2] != game::wii::B &&
+                        bindings[3] != game::wii::B)
+                        currentWiiMenu |= kWiiMenuBack;
+                }
+            }
             struct WiiMenuKey { uint16_t button; SDL_Scancode scan; SDL_Keycode key; };
             static constexpr WiiMenuKey menuKeys[] = {
                 {game::wii::Up, SDL_SCANCODE_UP, SDLK_UP},
                 {game::wii::Down, SDL_SCANCODE_DOWN, SDLK_DOWN},
                 {game::wii::Left, SDL_SCANCODE_LEFT, SDLK_LEFT},
                 {game::wii::Right, SDL_SCANCODE_RIGHT, SDLK_RIGHT},
-                {uint16_t(game::wii::A | game::wii::Plus | game::wii::Home), SDL_SCANCODE_RETURN, SDLK_RETURN},
-                {game::wii::B, SDL_SCANCODE_ESCAPE, SDLK_ESCAPE}
+                {uint16_t(kWiiMenuConfirm | kWiiMenuPause), SDL_SCANCODE_RETURN, SDLK_RETURN},
+                {kWiiMenuBack, SDL_SCANCODE_ESCAPE, SDLK_ESCAPE}
             };
             // Several buttons share Enter; combine their state before emitting transitions.
             for (const auto& k : menuKeys) {
@@ -12854,13 +12910,21 @@ int main(int argc, char* argv[])
                 cx = std::clamp(cx + cdx, 0.0f, float(fe.canvasWidth() - 1));
                 cy = std::clamp(cy + cdy, 0.0f, float(game::Frontend::kHeight - 1));
                 // GitHub #40: a pad's touchpad / gyro is the pad, not the mouse: Auto prompts stay the pad's buttons
-                // (was in.pad = false: the keyboard / mouse prompts came up while pointing with the pad)
                 in.mouseMoved = true, in.pad = true, in.keyboard = false;
                 if (gMenuCursor.lastPad) in.padType = game::padStyleOf(gMenuCursor.lastPad);
                 in.mouseX = int(cx), in.mouseY = int(cy);
                 fe.hideHand = false;
                 fe.handAlpha = 1.0f;
                 if (cclick) in.press = in.anyKey = in.click = true;
+            }
+            // Wiimote IR is an absolute pointer. Feed the frontend's own cursor directly; do not send SDL mouse events.
+            if (wiimoteMenuPointer) {
+                in.mouseMoved = true, in.pad = true, in.keyboard = false;
+                in.mouseX = int(std::lround(wiimoteMenuX * float(fe.canvasWidth() - 1)));
+                in.mouseY = int(std::lround(wiimoteMenuY * float(game::Frontend::kHeight - 1)));
+                fe.hideHand = false;
+                fe.handAlpha = 1.0f;
+                if (wiimoteMenuClick) in.press = in.anyKey = in.click = true;
             }
             in.ctrl = in.ctrl || (SDL_GetModState() & SDL_KMOD_CTRL) != 0;   // (DIK 0x1D / 0x9D held)
             {   // HOTD_MENU_TYPE="N:TEXT[;M:X,Y]" (developer, pc_cheats): at the menu's N-th frame TEXT typed with Ctrl held;
