@@ -6881,6 +6881,11 @@ int main(int argc, char* argv[])
     game::Pads pads;
     game::Wiimotes wiimotes;
     wiimotes.Load(cache + "wiimotes.ini");   // native Bluetooth Wii Remotes; disabled unless opted in in this file
+    if (const char* wii = std::getenv("HOTD_WII_REMOTES"); wii && std::string(wii) == "1") {
+        wiimotes.settings.enabled = true;
+        wiimotes.Configure();
+        wiimotes.Scan();
+    }
     pads.virtualOnly = !inputTestFile.empty() || std::getenv("HOTD_GALLERY_SHOT") || std::getenv("HOTD_JUKEBOX_SHOT") || std::getenv("HOTD_CURSOR_TEST");   // the input test: its own virtual pads only (a real pad plugged in changes nothing)
     game::LightGuns lightGuns;
     gLightGuns = &lightGuns;

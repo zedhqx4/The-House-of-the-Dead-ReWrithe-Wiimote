@@ -181,7 +181,7 @@ public:
     }
     void Scan()override{{std::lock_guard lock(mutex);requested=true;blocked.clear();}cv.notify_all();}
     void Disconnect(int p)override{
-        if(p<0 || p>1)return;
+        if(p<0 || p>=kPlayers)return;
         {std::lock_guard lock(mutex);disconnect[p]=true;}cv.notify_all();
     }
     void SwapPlayers()override{
@@ -209,7 +209,10 @@ private:
             bool scan=false;
             {
                 std::unique_lock lock(mutex);
-                cv.wait_for(lock,std::chrono::milliseconds(300),[&]{return stop || requested || clear || disconnect[0] || disconnect[1];});
+                cv.wait_for(lock,std::chrono::milliseconds(300),[&]{
+                    return stop || requested || clear ||
+                        std::any_of(disconnect.begin(),disconnect.end(),[](bool v){return v;});
+                });
                 if(stop)break;
                 for(int i=0;i<kPlayers;++i)if(clear || disconnect[i]){
                     if(disconnect[i] && !paths[i].empty())blocked.insert(paths[i]);
@@ -230,7 +233,7 @@ private:
                 {
                     std::lock_guard lock(mutex);if(!enabled || blocked.count(path))continue;
                     for(int i=0;i<kPlayers;++i)if(paths[i]==path && (!devices[i] || !devices[i]->alive)){slot=i;break;}
-                    if(slot<0){bool known=paths[0]==path || paths[1]==path;if(known)continue;
+                    if(slot<0){bool known=std::find(paths.begin(),paths.end(),path)!=paths.end();if(known)continue;
                         for(int i=0;i<kPlayers;++i)if(paths[i].empty()){slot=i;break;}}
                 }
                 if(slot<0)continue;
@@ -241,17 +244,20 @@ private:
                     previous=std::move(devices[slot]);devices[slot]=candidate;paths[slot]=path;}}
             }
             bool needRadio=false;
-            {std::lock_guard lock(mutex);needRadio = enabled;
-            for (int i = 0; i < kPlayers; ++i)
+            {std::lock_guard lock(mutex);needRadio = false;
+            if(enabled) for (int i = 0; i < kPlayers; ++i)
                 if (!devices[i] || !devices[i]->alive) { needRadio = true; break; }}
             if(needRadio && !DiscoverBluetooth(cancelInquiry)){
                 std::lock_guard lock(mutex);message="No Bluetooth radio   Connect a DolphinBar or adapter";
             }
-            std::unique_lock lock(mutex);cv.wait_for(lock,std::chrono::seconds(1),[&]{return stop || requested || clear || disconnect[0] || disconnect[1];});
+            std::unique_lock lock(mutex);cv.wait_for(lock,std::chrono::seconds(1),[&]{
+                return stop || requested || clear ||
+                    std::any_of(disconnect.begin(),disconnect.end(),[](bool v){return v;});
+            });
         }
     }
 };
 } // namespace
 std::unique_ptr<Backend> CreateBackend(){return std::make_unique<NativeBackend>();}
-} // namespace input::wii
+} // namespace hotd::game::wii
 #endif

@@ -355,9 +355,16 @@ target_link_libraries(hotd PRIVATE hotd_engine hotd_logic)
 if(WIN32)
     target_sources(hotd PRIVATE src/game/wiimote_win.cpp)
     target_link_libraries(hotd PRIVATE winhttp hid setupapi bthprops)   # util/update_check.cpp and native Wii Remote HID
+elseif(APPLE)
+    target_sources(hotd PRIVATE src/game/wiimote_mac.cpp)
+    target_link_libraries(hotd PRIVATE "-framework IOKit" "-framework CoreFoundation")
+else()
+    target_sources(hotd PRIVATE src/game/wiimote_linux.cpp)
 endif()
-add_executable(hotd_wiimote_test tests/wiimote_test.cpp src/game/wiimote_protocol.cpp)
-target_include_directories(hotd_wiimote_test PRIVATE src)
+if(NOT ANDROID)
+    add_executable(hotd_wiimote_test tests/wiimote_test.cpp src/game/wiimote_protocol.cpp)
+    target_include_directories(hotd_wiimote_test PRIVATE src)
+endif()
 
 # Experimental modes (user 2026-11-03: not in a public release until they are polished; docs/porting.md "Experimental
 # modes"): ON (development builds, build\Release and the private portable): the unreleased modes' menu items, command-line
