@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - feature/native-wiimote-4p
+      - feature/wiimote-menu-b-a-test
   pull_request:
     branches:
       - main
