@@ -11830,7 +11830,40 @@ int main(int argc, char* argv[])
         }
         pads.refresh();   // pads: hot-plug on every screen
         wiimotes.Refresh();   // Wiimotes: four independent native HID connections on the platform backend
-        if (screen != Screen::Game) wiimotes.ClearEdges();   // menu presses are not carried into the next game
+        if (screen != Screen::Game) {
+            // Menus consume ordinary SDL key events. Translate held Wii Remote buttons here so the same navigation
+            // works in the launcher, front end, attract / end screens and text-entry overlays without SDL gamepad emulation.
+            static uint16_t previousWiiMenu = 0;
+            uint16_t currentWiiMenu = 0;
+            for (const auto& remote : wiimotes.Status().player)
+                if (remote.connected) currentWiiMenu |= remote.buttons;
+            struct WiiMenuKey { uint16_t button; SDL_Scancode scan; SDL_Keycode key; };
+            static constexpr WiiMenuKey menuKeys[] = {
+                {game::wii::Up, SDL_SCANCODE_UP, SDLK_UP},
+                {game::wii::Down, SDL_SCANCODE_DOWN, SDLK_DOWN},
+                {game::wii::Left, SDL_SCANCODE_LEFT, SDLK_LEFT},
+                {game::wii::Right, SDL_SCANCODE_RIGHT, SDLK_RIGHT},
+                {game::wii::A, SDL_SCANCODE_RETURN, SDLK_RETURN},
+                {game::wii::Plus, SDL_SCANCODE_RETURN, SDLK_RETURN},
+                {game::wii::Home, SDL_SCANCODE_RETURN, SDLK_RETURN},
+                {game::wii::B, SDL_SCANCODE_ESCAPE, SDLK_ESCAPE}
+            };
+            // Several buttons share Enter; combine their state before emitting transitions.
+            for (const auto& k : menuKeys) {
+                const bool down = (currentWiiMenu & k.button) != 0;
+                const bool was = (previousWiiMenu & k.button) != 0;
+                if (down == was) continue;
+                SDL_Event key{};
+                key.type = down ? SDL_EVENT_KEY_DOWN : SDL_EVENT_KEY_UP;
+                key.key.windowID = SDL_GetWindowID(window);
+                key.key.scancode = k.scan;
+                key.key.key = k.key;
+                key.key.down = down;
+                SDL_PushEvent(&key);
+            }
+            previousWiiMenu = currentWiiMenu;
+            wiimotes.ClearEdges();   // menu presses are consumed; none leak into the next game
+        }
         // netplay (an online game may start from the menu): no pause on a lost pad; this PC's input slot 0 plays the
         // game's player 1 (host) or 2 (client)
         pads.lostPause = !gNet;
