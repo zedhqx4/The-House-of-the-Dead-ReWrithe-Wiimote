@@ -181,7 +181,7 @@ void Wiimotes::CaptureBinding() {
             remote.pressed=0;
             return;
         }
-        bindingMessage_=std::string("Bound: ")+wii::ButtonName(button);
+        bindingMessage_.clear();
         bindingMenuBlockedPlayer_=bindingPlayer_;
         bindingMenuBlockedButton_=button;
         bindingPlayer_=bindingAction_=-1;

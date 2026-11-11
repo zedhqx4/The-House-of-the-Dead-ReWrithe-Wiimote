@@ -24,7 +24,6 @@ constexpr uint16_t Two=0x0001, One=0x0002, B=0x0004, A=0x0008, Minus=0x0010,
                    Home=0x0080, Left=0x0100, Right=0x0200, Down=0x0400, Up=0x0800, Plus=0x1000;
 constexpr std::array<uint16_t, 7> Bindable{B,A,Plus,Home,One,Two,Minus};
 const char* ButtonName(uint16_t button);
-bool AssignButton(Profile& profile, int action, uint16_t button);
 
 struct AimPoint { double x=0, y=0; };
 struct AimCalibration {
@@ -39,6 +38,7 @@ struct Profile {
     AimCalibration calibration;
     int smoothing=1;  // 0 off, 1 light, 2 strong
 };
+bool AssignButton(Profile& profile, int action, uint16_t button);
 struct Settings {
     bool enabled=false, continuous=false;
     std::array<Profile,kPlayers> player;
