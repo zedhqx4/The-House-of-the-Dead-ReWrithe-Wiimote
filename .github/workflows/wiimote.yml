@@ -25,6 +25,7 @@ jobs:
           -DHOTD_LOCAL_ICON=OFF
           -DHOTD_ARCADE_SOUND=OFF
           -DHOTD_EXPERIMENTAL_MODES=OFF
+          -DHOTD_FETCH_STB=ON
       - name: Build
         run: cmake --build build --config Release --parallel --target hotd hotd_wiimote_test
       - name: Protocol and calibration tests
@@ -49,6 +50,7 @@ jobs:
           -DHOTD_LOCAL_ICON=OFF
           -DHOTD_ARCADE_SOUND=OFF
           -DHOTD_EXPERIMENTAL_MODES=OFF
+          -DHOTD_FETCH_STB=ON
           -DHOTD_STATIC_CXX_RUNTIME=OFF
       - name: Build
         run: cmake --build build --parallel --target hotd hotd_wiimote_test
@@ -57,7 +59,7 @@ jobs:
 
   macos:
     name: macOS arm64
-    runs-on: macos-14
+    runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
       - name: Configure
@@ -69,6 +71,7 @@ jobs:
           -DHOTD_LOCAL_ICON=OFF
           -DHOTD_ARCADE_SOUND=OFF
           -DHOTD_EXPERIMENTAL_MODES=OFF
+          -DHOTD_FETCH_STB=ON
           -DHOTD_STATIC_CXX_RUNTIME=OFF
       - name: Build
         run: cmake --build build --parallel --target hotd hotd_wiimote_test
