@@ -93,5 +93,6 @@ private:
     std::unique_ptr<wii::Backend> backend_;
     wii::Snapshot snapshot_;
     std::array<bool,kWiimotePlayers> lost_{};
+    std::array<bool,kWiimotePlayers> seen_{};
 };
 } // namespace hotd::game

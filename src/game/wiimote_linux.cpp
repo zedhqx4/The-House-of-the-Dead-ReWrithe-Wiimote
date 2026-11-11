@@ -11,6 +11,8 @@
 #include <cstring>
 #include <filesystem>
 #include <fcntl.h>
+#include <initializer_list>
+#include <utility>
 #include <mutex>
 #include <poll.h>
 #include <set>

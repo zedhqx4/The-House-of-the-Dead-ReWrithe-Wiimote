@@ -22,6 +22,7 @@ For development, HOTD_WII_REMOTES=1 enables support and requests a scan for that
 - Windows: the backend uses Windows Bluetooth discovery/authentication and the native HID interface. It targets RVL-CNT-01 and RVL-CNT-01-TR, including DolphinBar Mode 4 HID interfaces.
 - Linux: the backend reads the Nintendo HID interface through /dev/hidraw*. Pair the remote in the desktop's Bluetooth settings first; then enable support in wiimotes.ini. The kernel/BlueZ stack owns pairing.
 - macOS: the backend reads the Nintendo HID interface through IOKit. Pair the remote in macOS Bluetooth settings first; then enable support in wiimotes.ini.
+- Android/Quest: native Wiimote transport is not implemented; normal game inputs are unchanged.
 
 A powered infrared sensor bar is required for native pointing. The backend does not emulate a mouse or SDL gamepad. MotionPlus, extension devices and speaker audio are not used.
 

@@ -21,6 +21,7 @@ Wiimotes::~Wiimotes() = default;
 bool Wiimotes::Load(const std::string& file) {
     const bool ok=settings.Load(file);
     Configure();
+    if(settings.enabled && backend_) backend_->Scan();
     return ok;
 }
 bool Wiimotes::Save(const std::string& file) const {
@@ -63,13 +64,15 @@ void Wiimotes::Apply(Runtime& rt,GunState guns[],Pause& pause,PauseInput& pin,in
     for(int p=0;p<kWiimotePlayers;++p) {
         auto& remote=snapshot_.player[p];
         if(!remote.connected || !remote.reserved) {
-            if(!lost_[p] && mode==4 && playerState(rt,gamePlayer[p])==5 && !paused)
+            if(seen_[p] && !lost_[p] && mode==4 && playerState(rt,gamePlayer[p])==5 && !paused)
                 pause.focus(false);
             lost_[p]=true;
+            guns[p].held=false;
             remote.pressed=0;
             continue;
         }
         lost_[p]=false;
+        seen_[p]=true;
         const auto& profile=settings.player[p];
         wii::AimPoint aim=remote.raw;
         if(profile.calibration.calibrated)

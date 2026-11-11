@@ -75,6 +75,7 @@ private:
     std::mutex mutex;
     Remote state;
     std::array<uint8_t,64> reportBuffer{};
+    std::atomic<int64_t> lastReportNs{0};
     static void Input(void* context,IOReturn result,void*,IOHIDReportType,uint32_t reportId,uint8_t* data,CFIndex length) {
         if(result!=kIOReturnSuccess || !context || length<0 || length>63) return;
         auto* self=static_cast<Device*>(context);
@@ -88,13 +89,18 @@ private:
             if(length) std::copy(data,data+length,packet.begin()+1);
             size=size_t(length)+1;
         }
-        std::lock_guard lock(self->mutex);
-        DecodeReport(packet.data(),size,self->state);
+        {
+            std::lock_guard lock(self->mutex);
+            DecodeReport(packet.data(),size,self->state);
+        }
+        self->lastReportNs.store(std::chrono::duration_cast<std::chrono::nanoseconds>(
+            Clock::now().time_since_epoch()).count(),std::memory_order_relaxed);
     }
     bool Send(const uint8_t* bytes,size_t length) {
         if(!device || !bytes || !length || length>64) return false;
+        // IOKit requires the report ID both as the argument and as byte zero in the report buffer.
         return IOHIDDeviceSetReport(device,kIOHIDReportTypeOutput,bytes[0],
-            const_cast<uint8_t*>(bytes+1),CFIndex(length-1))==kIOReturnSuccess;
+            bytes,CFIndex(length))==kIOReturnSuccess;
     }
     bool Send(std::initializer_list<uint8_t> bytes) {
         return Send(bytes.begin(),bytes.size());
@@ -121,6 +127,8 @@ private:
             return;
         }
         auto last=Clock::now(),statusAt=last;
+        lastReportNs.store(std::chrono::duration_cast<std::chrono::nanoseconds>(
+            last.time_since_epoch()).count(),std::memory_order_relaxed);
         int led=-1;
         while(!stop) {
             if(led!=player) {
@@ -129,18 +137,18 @@ private:
             }
             CFRunLoopRunInMode(kCFRunLoopDefaultMode,0.01,true);
             const auto now=Clock::now();
+            const auto reported=Clock::time_point(std::chrono::nanoseconds(
+                lastReportNs.load(std::memory_order_relaxed)));
+            if(reported>last) last=reported;
             if(now-last>std::chrono::seconds(5)) break;
             if(now-statusAt>std::chrono::seconds(10)) {
                 if(!Send({0x15,0})) break;
                 statusAt=now;
             }
-            {
+            if(now-last>std::chrono::milliseconds(300)) {
                 std::lock_guard lock(mutex);
-                if(state.tracking) last=now;
-                if(now-last>std::chrono::milliseconds(300)) {
-                    state.tracking=false;
-                    state.buttons=state.pressed=0;
-                }
+                state.tracking=false;
+                state.buttons=state.pressed=0;
             }
         }
         Send({0x11,0});
