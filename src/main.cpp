@@ -11109,14 +11109,14 @@ int main(int argc, char* argv[])
                 if (!wiimotes.Save(cache + "wiimotes.ini"))
                     SDL_Log("wiimotes: could not save wiimotes.ini");
             };
-            auto wiimoteStatus = [&](int p) {
+            auto wiimoteStatus = [&wiimotes](int p) {
                 const auto& remote = wiimotes.Status().player[p];
                 if (!wiimotes.settings.enabled) return std::string("Support Off");
                 if (remote.connected) return remote.reserved ? std::string("Connected") : std::string("Connected / unassigned");
                 if (remote.reserved) return std::string("Disconnected / reserved");
                 return wiimotes.Status().scanning ? std::string("Searching...") : std::string("Not connected");
             };
-            wiimotePlayerPage = [&, saveWiimotes](int p) {
+            wiimotePlayerPage = [&, saveWiimotes, wiimoteStatus](int p) {
                 using X2 = game::Frontend::Extra;
                 std::vector<X2> rows;
                 rows.push_back({"Connection", [&, p]() { return wiimoteStatus(p); }, nullptr,
@@ -11175,7 +11175,7 @@ int main(int argc, char* argv[])
                 fe.extrasExit = [&]() { wiimotePage(); };
                 fe.screenExtras();
             };
-            wiimotePage = [&, saveWiimotes]() {
+            wiimotePage = [&, saveWiimotes, wiimoteStatus]() {
                 using X2 = game::Frontend::Extra;
                 std::vector<X2> rows;
                 rows.push_back({"Support", [&]() { return wiimotes.settings.enabled ? std::string("On") : std::string("Off"); },
