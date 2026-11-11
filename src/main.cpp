@@ -11982,7 +11982,7 @@ int main(int argc, char* argv[])
         }
         pads.refresh();   // pads: hot-plug on every screen
         wiimotes.Refresh();   // Wiimotes: four independent native HID connections on the platform backend
-        wiimotes.CaptureCalibration();   // menu and game alike: B captures the selected player's IR target
+        wiimotes.CaptureCalibration();   // menu and game alike: A captures; B cancels the selected player's IR target
         wiimotes.CaptureBinding();       // the selected player/action captures the next supported Wii Remote button
         if (wiimotes.bindingChanged) {
             wiimotes.bindingChanged = false;

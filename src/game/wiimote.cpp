@@ -117,7 +117,12 @@ void Wiimotes::CaptureCalibration() {
     }
     // Consume this player's controls even on the frame that completes calibration.
     calibrationConsumed_[calibrationPlayer_]=true;
-    if((remote.pressed&wii::B) && remote.tracking) {
+    if(remote.pressed&wii::B) {
+        CancelCalibration();
+        remote.pressed=0;
+        return; // B backs out of calibration.
+    }
+    if((remote.pressed&wii::A) && remote.tracking) {
         calibrationSamples_[calibrationStep_]=remote.raw;
         if(++calibrationStep_==4) {
             auto& calibration=settings.player[calibrationPlayer_].calibration;
@@ -149,7 +154,8 @@ std::vector<std::string> Wiimotes::CalibrationLines() const {
         "WII REMOTE CALIBRATION",
         "",
         "Player "+std::to_string(calibrationPlayer_+1)+": point at the "+names[calibrationStep_]+" target",
-        "Press B when both IR dots are visible"
+        "Press A when both IR dots are visible",
+        "B or Esc: cancel"
     };
     if(calibrationFailed_) lines.push_back("Calibration geometry invalid; repeat the four points");
     lines.push_back("Esc: cancel");
