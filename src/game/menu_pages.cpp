@@ -732,6 +732,9 @@ std::vector<Frontend::Extra> menuCategoryRows(int category, LaunchConfig& c, con
         // padpass: every seat's light gun (players 3 / 4 were missing), the gun's kind and its screen aids, and the
         // calibration from the menu (before: F9 in the game only)
         // ipolish (Light Guns: Assign): which gun / mouse is whose seat (before: the order first used only)
+        r.push_back({"Wii Remotes", []() { return page("Configure"); }, [h]() { if (h.wiimotePage) h.wiimotePage(); },
+                     "Connect native Bluetooth Wii Remotes, check IR tracking and calibrate each player's aim"});
+        experimental(r);
         r.push_back({"Light Guns", []() { return page("Assign"); }, [h]() { if (h.gunPage) h.gunPage(); },
                      "Give each player their own light gun or mouse: pull its trigger when the player's row waits"});
         experimental(r);

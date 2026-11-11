@@ -67,15 +67,43 @@ void Wiimotes::Refresh() {
 void Wiimotes::ClearEdges() {
     for(auto& remote:snapshot_.player) remote.pressed=0;
 }
-bool Wiimotes::StartCalibration() {
-    calibrationPlayer_ = -1;
-    calibrationStep_ = 0;
-    calibrationFailed_ = false;
-    for(int p=0;p<kWiimotePlayers;++p) {
-        const auto& remote=snapshot_.player[p];
-        if(remote.connected && remote.reserved) { calibrationPlayer_=p; break; }
+bool Wiimotes::StartCalibration(int player) {
+    if(player<0 || player>=kWiimotePlayers || !settings.enabled) return false;
+    const auto& remote=snapshot_.player[player];
+    if(!remote.connected || !remote.reserved) return false;
+    calibrationPlayer_=player;
+    calibrationStep_=0;
+    calibrationFailed_=false;
+    calibrationConsumed_.fill(false);
+    snapshot_.player[player].pressed=0;
+    return true;
+}
+void Wiimotes::CaptureCalibration() {
+    calibrationConsumed_.fill(false);
+    if(calibrationPlayer_<0) return;
+    auto& remote=snapshot_.player[calibrationPlayer_];
+    if(!remote.connected || !remote.reserved) {
+        CancelCalibration();
+        return;
     }
-    return calibrationPlayer_ >= 0;
+    // Consume this player's controls even on the frame that completes calibration.
+    calibrationConsumed_[calibrationPlayer_]=true;
+    if((remote.pressed&wii::B) && remote.tracking) {
+        calibrationSamples_[calibrationStep_]=remote.raw;
+        if(++calibrationStep_==4) {
+            auto& calibration=settings.player[calibrationPlayer_].calibration;
+            if(calibration.Fit(calibrationSamples_)) {
+                calibrated=true;
+                calibrationFailed_=false;
+                calibrationPlayer_=-1;
+                calibrationStep_=0;
+            } else {
+                calibrationStep_=0;
+                calibrationFailed_=true;
+            }
+        }
+    }
+    remote.pressed=0;
 }
 bool Wiimotes::CalibrationTarget(float& x,float& y) const {
     if(calibrationPlayer_ < 0) return false;
@@ -100,6 +128,7 @@ std::vector<std::string> Wiimotes::CalibrationLines() const {
 
 bool Wiimotes::fireHeld(int player) const {
     if(player<0 || player>=kWiimotePlayers || !settings.enabled) return false;
+    if(player==calibrationPlayer_ || calibrationConsumed_[player]) return false;
     const auto& remote=snapshot_.player[player];
     return remote.connected && (remote.buttons&settings.player[player].buttons[0])!=0;
 }
@@ -120,22 +149,9 @@ void Wiimotes::Apply(Runtime& rt,GunState guns[],Pause& pause,PauseInput& pin,in
         lost_[p]=false;
         seen_[p]=true;
         auto& profile=settings.player[p];
-        if(p==calibrationPlayer_) {
-            if((remote.pressed & wii::B) && remote.tracking) {
-                calibrationSamples_[calibrationStep_]=remote.raw;
-                if(++calibrationStep_==4) {
-                    if(profile.calibration.Fit(calibrationSamples_)) {
-                        calibrated=true;
-                        calibrationFailed_=false;
-                        calibrationPlayer_=-1;
-                    } else {
-                        calibrationStep_=0;
-                        calibrationFailed_=true;
-                    }
-                }
-            }
+        if(p==calibrationPlayer_ || calibrationConsumed_[p]) {
             remote.pressed=0;
-            continue; // calibration presses must never become in-game shots / reloads
+            continue; // calibration input must never become in-game shots / reloads
         }
         wii::AimPoint aim=remote.raw;
         if(profile.calibration.calibrated)

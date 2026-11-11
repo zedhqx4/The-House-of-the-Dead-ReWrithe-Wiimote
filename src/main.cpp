@@ -3420,6 +3420,8 @@ static std::function<bool(const SDL_Event&)> bindEvent;
 // ipolish: Controls > Light Guns' Assign page: the menu's clicks while a seat waits for a trigger pull, its countdown
 static std::function<void()> gunAssignRefresh;
 static std::function<bool(const SDL_Event&)> gunAssignEvent;
+// Native Wii Remote setup: refresh the live status shown by the Controls pages.
+static std::function<void()> wiimoteMenuRefresh;
 
 // perf (testing, docs/performance.md): HOTD_STARTUP_TIME=1: the window hidden, the launcher's and the menu's first
 // frames logged in ms since the process started ("startup: ..."), then the run ends (with a launcher.ini the launcher
@@ -11098,6 +11100,124 @@ int main(int argc, char* argv[])
             hooks.gunWaiting = [&]() { return lightGuns.assigning(); };
             hooks.gunWaitLeft = [&]() { return std::max(0, 10 - int((SDL_GetTicks() - gunWaitAt) / 1000)); };
             hooks.gunConnected = [&](const std::string& key) { return lightGuns.connected(key); };
+
+            // Wii Remotes: the setup menu follows hotd2-re's LightgunMenu pattern. Calibration is a menu
+            // interaction with four on-screen targets; it does not launch or require a game session.
+            static std::function<void(int)> wiimotePlayerPage;
+            static std::function<void()> wiimotePage;
+            auto saveWiimotes = [&]() {
+                if (!wiimotes.Save(cache + "wiimotes.ini"))
+                    SDL_Log("wiimotes: could not save wiimotes.ini");
+            };
+            auto wiimoteStatus = [&](int p) {
+                const auto& remote = wiimotes.Status().player[p];
+                if (!wiimotes.settings.enabled) return std::string("Support Off");
+                if (remote.connected) return remote.reserved ? std::string("Connected") : std::string("Connected / unassigned");
+                if (remote.reserved) return std::string("Disconnected / reserved");
+                return wiimotes.Status().scanning ? std::string("Searching...") : std::string("Not connected");
+            };
+            wiimotePlayerPage = [&, saveWiimotes](int p) {
+                using X2 = game::Frontend::Extra;
+                std::vector<X2> rows;
+                rows.push_back({"Connection", [&, p]() { return wiimoteStatus(p); }, nullptr,
+                                "This player's assigned Wii Remote. A disconnected slot remains reserved."});
+                rows.push_back({"IR Tracking", [&, p]() {
+                                    const auto& remote = wiimotes.Status().player[p];
+                                    if (!remote.connected) return std::string("No remote");
+                                    return remote.tracking ? std::to_string(remote.dots) + " dots / Tracking" :
+                                                             std::to_string(remote.dots) + " dots / No lock";
+                                }, nullptr, "The infrared sensor bar should be visible to the Wii Remote."});
+                rows.push_back({"Battery", [&, p]() {
+                                    const int battery = wiimotes.Status().player[p].battery;
+                                    return battery < 0 ? std::string("Unknown") : std::to_string(battery) + "%";
+                                }, nullptr, "Battery level reported by the Wii Remote."});
+                rows.push_back({"Aim Calibration", [&, p]() {
+                                    return wiimotes.settings.player[p].calibration.calibrated ? std::string("Set") :
+                                                                                                 std::string("Default");
+                                }, nullptr, "The four-point homography saved for this player's IR aim."});
+                rows.push_back({"Calibrate Aim", []() { return std::string("Start >"); }, [&, p]() {
+                                    if (!wiimotes.StartCalibration(p))
+                                        SDL_Log("wiimotes: Player %d is not connected; calibration not started", p + 1);
+                                    else
+                                        fe.screenExtras();
+                                }, "Aim at the four targets in order and press B while both IR dots are visible."});
+                rows.back().off = [&, p]() {
+                    const auto& remote = wiimotes.Status().player[p];
+                    return remote.connected && remote.reserved ? std::string() :
+                           std::string("Connect this player's Wii Remote first (Wii Remotes > Scan for Remotes)");
+                };
+                rows.push_back({"Reset Calibration", []() { return std::string("Reset"); }, [&, p, saveWiimotes]() {
+                                    wiimotes.settings.player[p].calibration = {};
+                                    saveWiimotes();
+                                    fe.screenExtras();
+                                }, "Restore this player's default IR mapping."});
+                rows.back().off = [&, p]() {
+                    return wiimotes.settings.player[p].calibration.calibrated ? std::string() :
+                           std::string("This player has no saved aim calibration");
+                };
+                rows.push_back({"Aim Smoothing", [&, p]() {
+                                    static const char* const names[] = {"Off", "Light", "Strong"};
+                                    return std::string(names[std::clamp(wiimotes.settings.player[p].smoothing, 0, 2)]);
+                                }, [&, p, saveWiimotes]() {
+                                    auto& smoothing = wiimotes.settings.player[p].smoothing;
+                                    smoothing = (smoothing + 1) % 3;
+                                    saveWiimotes();
+                                }, "Reduce small IR tracking jitter independently for each player."});
+                rows.back().choices = {"Off", "Light", "Strong"};
+                rows.back().choiceNow = [&, p]() { return std::clamp(wiimotes.settings.player[p].smoothing, 0, 2); };
+                rows.back().pickAt = [&, p, saveWiimotes](int k) {
+                    wiimotes.settings.player[p].smoothing = std::clamp(k, 0, 2);
+                    saveWiimotes();
+                };
+                fe.extras = std::move(rows);
+                fe.extrasTitle = "Wii Remote: Player " + std::to_string(p + 1);
+                fe.extrasTab = -1;
+                fe.extrasExit = [&]() { wiimotePage(); };
+                fe.screenExtras();
+            };
+            wiimotePage = [&, saveWiimotes]() {
+                using X2 = game::Frontend::Extra;
+                std::vector<X2> rows;
+                rows.push_back({"Support", [&]() { return wiimotes.settings.enabled ? std::string("On") : std::string("Off"); },
+                                [&, saveWiimotes]() {
+                                    wiimotes.settings.enabled = !wiimotes.settings.enabled;
+                                    wiimotes.Configure();
+                                    saveWiimotes();
+                                    fe.screenExtras();
+                                }, "Enable or disable the native Bluetooth / HID Wii Remote backend."});
+                rows.push_back({"Scan for Remotes", [&]() {
+                                    return wiimotes.Status().scanning ? std::string("Searching...") : std::string("Scan");
+                                }, [&, saveWiimotes]() {
+                                    wiimotes.Scan();
+                                    saveWiimotes();
+                                    fe.screenExtras();
+                                }, "Search for nearby Wii Remotes. Pair first in the operating system on Linux and macOS."});
+                for (int p = 0; p < game::kWiimotePlayers; ++p) {
+                    rows.push_back({"Player " + std::to_string(p + 1) + (p >= 2 ? " (4P)" : ""),
+                                    [&, p]() { return wiimoteStatus(p); },
+                                    [&, p]() { wiimotePlayerPage(p); },
+                                    "Connection, infrared tracking, aim calibration and smoothing for this player."});
+                    if (p >= 2) experimental(rows);
+                }
+                fe.extras = std::move(rows);
+                fe.extrasTitle = "Wii Remotes";
+                fe.extrasTab = -1;
+                fe.extrasExit = [&]() { openCategory(game::kCatControls); };
+                fe.screenExtras();
+            };
+            hooks.wiimotePage = [&]() { wiimotePage(); };
+            wiimoteMenuRefresh = [&]() {
+                static Uint64 at = 0;
+                if (fe.screen() != 100 ||
+                    (fe.extrasTitle != "Wii Remotes" && fe.extrasTitle.rfind("Wii Remote: Player ", 0) != 0))
+                    return;
+                const Uint64 now = SDL_GetTicks();
+                if (now - at >= 250) {
+                    at = now;
+                    fe.screenExtras();
+                }
+            };
+
             gunAssignEvent = [&, gunRaw](const SDL_Event& e) {
                 const bool waiting = lightGuns.assigning() >= 0;
                 if (!waiting && SDL_GetTicks() >= gunEatUntil)
@@ -11830,13 +11950,22 @@ int main(int argc, char* argv[])
         }
         pads.refresh();   // pads: hot-plug on every screen
         wiimotes.Refresh();   // Wiimotes: four independent native HID connections on the platform backend
+        wiimotes.CaptureCalibration();   // menu and game alike: B captures the selected player's IR target
+        if (wiimotes.calibrated) {
+            wiimotes.calibrated = false;
+            if (!wiimotes.Save(cache + "wiimotes.ini"))
+                SDL_Log("wiimotes: could not save calibration to wiimotes.ini");
+            else
+                SDL_Log("wiimotes: calibration saved");
+        }
         if (screen != Screen::Game) {
             // Menus consume ordinary SDL key events. Translate held Wii Remote buttons here so the same navigation
             // works in the launcher, front end, attract / end screens and text-entry overlays without SDL gamepad emulation.
             static uint16_t previousWiiMenu = 0;
             uint16_t currentWiiMenu = 0;
-            for (const auto& remote : wiimotes.Status().player)
-                if (remote.connected) currentWiiMenu |= remote.buttons;
+            if (!wiimotes.Calibrating())
+                for (const auto& remote : wiimotes.Status().player)
+                    if (remote.connected) currentWiiMenu |= remote.buttons;
             struct WiiMenuKey { uint16_t button; SDL_Scancode scan; SDL_Keycode key; };
             static constexpr WiiMenuKey menuKeys[] = {
                 {game::wii::Up, SDL_SCANCODE_UP, SDLK_UP},
@@ -12183,6 +12312,22 @@ int main(int argc, char* argv[])
                     continue;
                 if (gunAssignEvent && gunAssignEvent(e))   // ipolish: a seat waits for a light gun's trigger pull
                     continue;
+                // During IR calibration the chosen remote's B is data, not Escape / a menu command. Keyboard
+                // Escape or a regular gamepad's Back cancels without leaving the setup page.
+                if (wiimotes.Calibrating()) {
+                    const bool cancel = (e.type == SDL_EVENT_KEY_DOWN && e.key.key == SDLK_ESCAPE) ||
+                                        (e.type == SDL_EVENT_GAMEPAD_BUTTON_DOWN && e.gbutton.button == SDL_GAMEPAD_BUTTON_EAST);
+                    if (cancel) {
+                        wiimotes.CancelCalibration();
+                        fe.screenExtras();
+                        continue;
+                    }
+                    if (e.type == SDL_EVENT_KEY_DOWN || e.type == SDL_EVENT_KEY_UP ||
+                        e.type == SDL_EVENT_GAMEPAD_BUTTON_DOWN || e.type == SDL_EVENT_GAMEPAD_BUTTON_UP ||
+                        e.type == SDL_EVENT_MOUSE_BUTTON_DOWN || e.type == SDL_EVENT_MOUSE_BUTTON_UP ||
+                        e.type == SDL_EVENT_MOUSE_WHEEL)
+                        continue;
+                }
                 // padpass: a pad's button: the prompts show that pad's buttons (Xbox / PlayStation / Nintendo names),
                 // whatever the button goes on to do (the Jukebox's, PC Mode's seats ...)
                 if (e.type == SDL_EVENT_GAMEPAD_BUTTON_DOWN) {
@@ -13049,6 +13194,7 @@ int main(int argc, char* argv[])
                 running = false;
             }
             if (aimTestRefresh) aimTestRefresh();   // padfeel: the Aim Test page's readout
+            if (wiimoteMenuRefresh) wiimoteMenuRefresh();   // native Wii Remote setup: live status / calibration row
             if (bindRefresh) bindRefresh();       // keybind: the Keys & Buttons page's countdown
             if (gunAssignRefresh) gunAssignRefresh();   // ipolish: the Light Guns page's wait / its result
             // Online Co-op: the network and the page's values; text input on while a field is edited; the game when
@@ -13239,6 +13385,17 @@ int main(int argc, char* argv[])
             }
             else
                 hud.drawPicture(feCanvas, fe.canvasPixelsW(), fe.canvasPixelsH(), ww, wh);
+            // Native Wii Remote calibration mirrors hotd2-re's LightgunMenu: target and instructions are drawn over
+            // the current Options page, so setup never needs to start a game.
+            {
+                float tu = 0.0f, tv = 0.0f;
+                if (wiimotes.CalibrationTarget(tu, tv)) {
+                    padTarget.setText({"\\ | /", "- + -", "/ | \\"}, wh >= 720 ? 4 : 3);
+                    padTarget.drawAt(ww, wh, tu * ww, tv * wh);
+                    padNote.setText(wiimotes.CalibrationLines(), wh >= 720 ? 3 : 2);
+                    padNote.drawAt(ww, wh, ww * 0.5f, wh * 0.5f);
+                }
+            }
             // HOTD_GALLERY_SHOT's picture: the page over the model (regallery: the Cut-scenes page too, reached with
             // HOTD_GALLERY_KEYS=C), the window as it is now
             static int scenesFrames = 0;
@@ -14386,8 +14543,6 @@ int main(int argc, char* argv[])
                     wiimotes.CancelCalibration();
                 else if (lightGuns.calibrating() && sc == SDL_SCANCODE_ESCAPE)   // pads: Esc ends the light-gun calibration
                     lightGuns.cancelCalibration();
-                else if (sc == SDL_SCANCODE_F10 && !paused && wiimotes.StartCalibration())
-                    SDL_Log("wiimotes: four-point IR calibration started");
                 else if (sc == SDL_SCANCODE_F9 && lightGuns.active() && !paused)   // pads: the light-gun calibration
                     lightGuns.startCalibration();
                 else if (sc == SDL_SCANCODE_ESCAPE || (pauseKey && !rt.name_entry_active()))   // (the name entry types P)
@@ -14651,13 +14806,6 @@ int main(int argc, char* argv[])
             pads.apply(rt, guns, pause, pauseIn, lw, lh);
             lightGuns.apply(rt, guns, paused, lw, lh);
             wiimotes.Apply(rt, guns, pause, pauseIn, lw, lh);
-            if (wiimotes.calibrated) {
-                wiimotes.calibrated = false;
-                if (!wiimotes.Save(cache + "wiimotes.ini"))
-                    SDL_Log("wiimotes: could not save calibration to wiimotes.ini");
-                else
-                    SDL_Log("wiimotes: calibration saved");
-            }
             if (lightGuns.calibrated) {   // a light gun calibrated (F9): kept in launcher.ini
                 lightGuns.calibrated = false;
                 for (int p = 0; p < game::kInputPlayers; ++p)   // (players 3 / 4 too: gun3cal / gun4cal)

@@ -35,6 +35,8 @@ Each connection is assigned to one of P1-P4. The backend reserves a disconnected
 The protocol decoder, button edge handling, four-point homography calibration and four-player settings have automated tests. Pairing, IR quality and four simultaneous physical remotes still need hardware validation on each operating system.
 
 
-## Four-point IR calibration
+## Setup and four-point IR calibration
 
-During gameplay, press **F10** to calibrate the first connected Wii Remote. Aim at each of the four on-screen targets (top-left, top-right, bottom-right, bottom-left) and press **B** while both IR dots are visible. The fitted homography is stored in that player's profile in `wiimotes.ini`. Press **Esc** to cancel. Repeat F10 after connecting another remote to calibrate its own player slot. F9 remains the existing light-gun calibration shortcut.
+Open **Options > Controls > Wii Remotes**. Turn **Support** on, choose **Scan for Remotes**, then open the desired player slot. The page shows connection, IR tracking, battery and aim-calibration status. Linux and macOS users should pair the remote in the operating system's Bluetooth settings first.
+
+Choose **Calibrate Aim** from that player's page. The four targets appear over the menu (top-left, top-right, bottom-right, bottom-left). Aim at each target and press **B** while both IR dots are visible. The fitted homography is saved automatically to that player's profile in `wiimotes.ini`. Press **Esc** or a regular controller's Back button to cancel without replacing the previous calibration. Repeat separately for each connected player.

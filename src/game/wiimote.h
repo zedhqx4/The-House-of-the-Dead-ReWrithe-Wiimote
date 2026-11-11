@@ -91,8 +91,10 @@ public:
     void ClearEdges();
     bool fireHeld(int player) const;
 
-    // Four-point IR calibration: press the player's Confirm button at each displayed target.
-    bool StartCalibration();
+    // Four-point IR calibration is started from Options > Controls > Wii Remotes.
+    // The host draws the targets on the current menu and calls CaptureCalibration every frame.
+    bool StartCalibration(int player);
+    void CaptureCalibration();
     void CancelCalibration() { calibrationPlayer_ = -1; }
     bool Calibrating() const { return calibrationPlayer_ >= 0; }
     bool CalibrationTarget(float& x, float& y) const;
@@ -110,6 +112,7 @@ private:
     std::array<bool,kWiimotePlayers> hasAim_{};
     int calibrationPlayer_ = -1, calibrationStep_ = 0;
     std::array<wii::AimPoint,4> calibrationSamples_{};
+    std::array<bool,kWiimotePlayers> calibrationConsumed_{};
     bool calibrationFailed_ = false;
 };
 } // namespace hotd::game
