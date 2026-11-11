@@ -11843,9 +11843,7 @@ int main(int argc, char* argv[])
                 {game::wii::Down, SDL_SCANCODE_DOWN, SDLK_DOWN},
                 {game::wii::Left, SDL_SCANCODE_LEFT, SDLK_LEFT},
                 {game::wii::Right, SDL_SCANCODE_RIGHT, SDLK_RIGHT},
-                {game::wii::A, SDL_SCANCODE_RETURN, SDLK_RETURN},
-                {game::wii::Plus, SDL_SCANCODE_RETURN, SDLK_RETURN},
-                {game::wii::Home, SDL_SCANCODE_RETURN, SDLK_RETURN},
+                {uint16_t(game::wii::A | game::wii::Plus | game::wii::Home), SDL_SCANCODE_RETURN, SDLK_RETURN},
                 {game::wii::B, SDL_SCANCODE_ESCAPE, SDLK_ESCAPE}
             };
             // Several buttons share Enter; combine their state before emitting transitions.
