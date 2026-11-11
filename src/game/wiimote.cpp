@@ -1,5 +1,6 @@
 #include "game/wiimote.h"
 #include "game/pause.h"
+#include "game/pads.h"
 #include "game/runtime.h"
 #include <algorithm>
 #include <cmath>
@@ -101,7 +102,6 @@ void Wiimotes::Apply(Runtime& rt,GunState guns[],Pause& pause,PauseInput& pin,in
             hasAim_[p]=false;
         }
 
-        const uint16_t down=remote.buttons;
         const uint16_t edge=remote.pressed;
         if(paused) {
             pin.up=pin.up || ((edge& wii::Up)!=0);
