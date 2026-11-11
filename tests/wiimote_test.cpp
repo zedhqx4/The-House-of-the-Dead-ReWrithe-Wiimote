@@ -55,6 +55,8 @@ int main() {
 
     Settings defaults;
     Check(defaults.rumble,"rumble is enabled by default");
+    Check(defaults.player[0].buttons==std::array<uint16_t,4>{B,A,One,Plus},
+          "default gameplay bindings use One for Confirm and Plus for Start/Pause");
     Settings settings;
     settings.enabled=true;
     settings.continuous=true;
@@ -75,6 +77,14 @@ int main() {
     Check(loaded.player[2].buttons==settings.player[2].buttons,"restore P3 bindings");
     Check(loaded.player[3].smoothing==2,"restore P4 settings");
     std::remove(path.c_str());
+
+    const std::string legacyPath="wiimote-legacy-test.ini";
+    { std::ofstream legacy(legacyPath); legacy<<"p1.buttons=4 8 4096 128\\n"; }
+    Settings migrated;
+    Check(migrated.Load(legacyPath),"load previous default settings");
+    Check(migrated.player[0].buttons==std::array<uint16_t,4>{B,A,One,Plus},
+          "migrate previous built-in defaults to Plus Start/Pause");
+    std::remove(legacyPath.c_str());
     std::puts("Wiimote protocol / calibration / four-player settings: OK");
     return 0;
 }

@@ -199,7 +199,7 @@ void Wiimotes::CaptureBinding() {
         if(!(remote.pressed&button)) continue;
         auto& profile=settings.player[bindingPlayer_];
         if(!wii::AssignButton(profile,bindingAction_,button)) {
-            static const char* const names[]={"Fire","Reload","Confirm","Pause"};
+            static const char* const names[]={"Fire","Reload","Confirm","Start / Pause"};
             int other=-1;
             for(int i=0;i<4;++i)
                 if(i!=bindingAction_ && profile.buttons[i]==button) { other=i; break; }
@@ -325,7 +325,7 @@ void Wiimotes::Apply(Runtime& rt,GunState guns[],Pause& pause,PauseInput& pin,in
         if(paused) {
             pin.up=pin.up || ((edge& wii::Up)!=0);
             pin.down=pin.down || ((edge& wii::Down)!=0);
-            pin.activate=pin.activate || ((edge&profile.buttons[2])!=0) || ((edge&profile.buttons[0])!=0);
+            pin.activate=pin.activate || ((edge&profile.buttons[2])!=0) || ((edge&wii::A)!=0);
             pin.toggle=pin.toggle || ((edge&profile.buttons[3])!=0) || ((edge&wii::Minus)!=0);
         } else {
             if(edge&profile.buttons[0]) guns[p].trigger=true;

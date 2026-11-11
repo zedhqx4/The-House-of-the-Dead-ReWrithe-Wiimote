@@ -34,8 +34,8 @@ struct AimCalibration {
     bool Fit(const std::array<AimPoint,4>& samples);
 };
 struct Profile {
-    // Fire, reload, confirm, pause / start. Duplicate bindings are rejected on load.
-    std::array<uint16_t,4> buttons{B,A,Plus,Home};
+    // Fire, reload, confirm, start / pause. Duplicate bindings are rejected on load.
+    std::array<uint16_t,4> buttons{B,A,One,Plus};
     AimCalibration calibration;
     int smoothing=1;  // 0 off, 1 light, 2 strong
 };

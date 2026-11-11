@@ -112,6 +112,10 @@ bool Settings::Load(const std::string& file) {
             }
         }
     }
+    // Migrate the previous built-in defaults without disturbing custom player mappings.
+    for(auto& profile:loaded.player)
+        if(profile.buttons==std::array<uint16_t,4>{B,A,Plus,Home})
+            profile.buttons={B,A,One,Plus};
     *this=loaded;
     return true;
 }

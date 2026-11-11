@@ -11135,7 +11135,7 @@ int main(int argc, char* argv[])
                 static const char* const wiimoteActionHelp[] = {
                     "Choose the Wii Remote button that fires this player's weapon.",
                     "Choose the Wii Remote button that reloads this player's weapon.",
-                    "Choose the button that confirms menu and pause-menu selections.",
+                    "Choose the additional button that confirms menu and pause-menu selections; A always accepts in the pause menu.",
                     "Choose the button that exits the boot attract, joins / continues while waiting, and opens or closes the in-game pause menu."
                 };
                 for (int action = 0; action < 4; ++action) {
