@@ -34,6 +34,8 @@ bool IsRemote(int fd) {
 std::string UniqueId(int fd,const std::string& fallback) {
     char value[256]{};
     if(ioctl(fd,HIDIOCGRAWUNIQ(sizeof(value)),value)>=0 && value[0]) return value;
+    std::memset(value,0,sizeof(value));
+    if(ioctl(fd,HIDIOCGRAWPHYS(sizeof(value)),value)>=0 && value[0]) return value;
     return fallback;
 }
 std::vector<std::pair<std::string,std::string>> HidrawDevices() {

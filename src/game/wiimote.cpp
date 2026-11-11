@@ -45,6 +45,11 @@ void Wiimotes::SwapPlayers() {
     backend_->SwapPlayers();
     std::swap(settings.player[0],settings.player[1]);
     std::swap(gamePlayer[0],gamePlayer[1]);
+    std::swap(snapshot_.player[0],snapshot_.player[1]);
+    std::swap(lost_[0],lost_[1]);
+    std::swap(seen_[0],seen_[1]);
+    std::swap(smoothedAim_[0],smoothedAim_[1]);
+    std::swap(hasAim_[0],hasAim_[1]);
 }
 void Wiimotes::Refresh() {
     if(!backend_) return;
