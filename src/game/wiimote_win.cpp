@@ -28,9 +28,10 @@ public:
     Handle(const Handle&)=delete;Handle& operator=(const Handle&)=delete;
     explicit operator bool()const{return value && value!=INVALID_HANDLE_VALUE;}
 };
-bool Write(HANDLE h,const uint8_t* data,size_t size,size_t outputLength) {
+bool Write(HANDLE h,const uint8_t* data,size_t size,size_t outputLength,bool rumble=false) {
     if(size>64 || outputLength>64)return false;
     uint8_t report[64]{};std::copy(data,data+size,report);
+    if(size>=2) report[1]=uint8_t((report[1]&0xfeu)|(rumble?0x01u:0u));
     Handle event(CreateEventW(nullptr,TRUE,FALSE,nullptr));if(!event)return false;
     OVERLAPPED ov{};ov.hEvent=event.value;DWORD written=0;
     BOOL ok=WriteFile(h,report,DWORD(std::max(size,outputLength)),&written,&ov);
@@ -83,14 +84,16 @@ private:
     Remote state;
     std::atomic<bool> rumbleRequested{false};
     size_t inputLength=22,outputLength=22;
-    bool Send(std::initializer_list<uint8_t> bytes){return Write(handle.value,bytes.begin(),bytes.size(),outputLength);}
+    bool Send(std::initializer_list<uint8_t> bytes){
+        return Write(handle.value,bytes.begin(),bytes.size(),outputLength,rumbleRequested.load(std::memory_order_relaxed));
+    }
     bool InitIR(){
         const uint8_t start=8,mode=3;
         const uint8_t sensitivity1[]{2,0,0,0x71,1,0,0xaa,0,0x64},sensitivity2[]{0x63,3};
         if(!Send({0x13,4}) || !Send({0x1a,4}))return false;
         for(auto cmd:{WriteRegister(0xb00030,&start,1),WriteRegister(0xb00000,sensitivity1,9),
                      WriteRegister(0xb0001a,sensitivity2,2),WriteRegister(0xb00033,&mode,1),WriteRegister(0xb00030,&start,1)}){
-            if(stop || !Write(handle.value,cmd.data(),cmd.size(),outputLength))return false;
+            if(stop || !Write(handle.value,cmd.data(),cmd.size(),outputLength,rumbleRequested.load(std::memory_order_relaxed)))return false;
             std::this_thread::sleep_for(std::chrono::milliseconds(60));
         }
         return Send({0x12,4,0x33}); // continuous buttons, accelerometer and 12-byte extended IR
@@ -132,6 +135,7 @@ private:
             if(now-statusAt>std::chrono::seconds(10)){if(!Send({0x15,0}))break;statusAt=now;}
         }
         if(pending){CancelIoEx(handle.value,&ov);GetOverlappedResult(handle.value,&ov,&bytes,TRUE);}
+        rumbleRequested.store(false,std::memory_order_relaxed);
         if(rumbling) Send({0x10,0});
         Send({0x11,0}); // release our player light; leave Windows pairing intact
         alive=false;

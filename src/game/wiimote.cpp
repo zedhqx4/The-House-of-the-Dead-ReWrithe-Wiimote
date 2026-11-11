@@ -158,7 +158,6 @@ std::vector<std::string> Wiimotes::CalibrationLines() const {
         "B or Esc: cancel"
     };
     if(calibrationFailed_) lines.push_back("Calibration geometry invalid; repeat the four points");
-    lines.push_back("Esc: cancel");
     return lines;
 }
 

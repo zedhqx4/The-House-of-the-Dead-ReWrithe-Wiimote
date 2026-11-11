@@ -107,9 +107,13 @@ private:
     }
     bool Send(const uint8_t* bytes,size_t length) {
         if(!device || !bytes || !length || length>64) return false;
+        // Keep the Wii Remote's common rumble bit set on every output report, not only report 0x10.
+        std::array<uint8_t,64> report{};
+        std::copy(bytes,bytes+length,report.begin());
+        if(length>=2) report[1]=uint8_t((report[1]&0xfeu)|(rumbleRequested.load(std::memory_order_relaxed)?0x01u:0u));
         // IOKit requires the report ID both as the argument and as byte zero in the report buffer.
-        return IOHIDDeviceSetReport(device,kIOHIDReportTypeOutput,bytes[0],
-            bytes,CFIndex(length))==kIOReturnSuccess;
+        return IOHIDDeviceSetReport(device,kIOHIDReportTypeOutput,report[0],
+            report.data(),CFIndex(length))==kIOReturnSuccess;
     }
     bool Send(std::initializer_list<uint8_t> bytes) {
         return Send(bytes.begin(),bytes.size());
@@ -165,6 +169,7 @@ private:
                 state.buttons=state.pressed=0;
             }
         }
+        rumbleRequested.store(false,std::memory_order_relaxed);
         if(rumbling) Send({0x10,0});
         Send({0x11,0});
         IOHIDDeviceUnscheduleFromRunLoop(device,CFRunLoopGetCurrent(),kCFRunLoopDefaultMode);

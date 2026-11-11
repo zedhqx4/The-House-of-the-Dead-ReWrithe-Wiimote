@@ -99,6 +99,7 @@ private:
         if(fd<0 || size>64) return false;
         uint8_t report[64]{};
         std::copy(bytes,bytes+size,report);
+        if(size>=2) report[1]=uint8_t((report[1]&0xfeu)|(rumbleRequested.load(std::memory_order_relaxed)?0x01u:0u));
         const ssize_t n=write(fd,report,size);
         return n==ssize_t(size);
     }
@@ -156,6 +157,7 @@ private:
                 statusAt=now;
             }
         }
+        rumbleRequested.store(false,std::memory_order_relaxed);
         if(rumbling) Send({0x10,0});
         Send({0x11,0});
         alive=false;
