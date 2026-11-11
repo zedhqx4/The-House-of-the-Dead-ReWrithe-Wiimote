@@ -54,7 +54,7 @@ public:
     std::string key;
     std::atomic<bool> stop{false},alive{false};
     std::atomic<int> player{0};
-    explicit Device(IOHIDDeviceRef d,int slot):device(d),player(slot) {
+    explicit Device(IOHIDDeviceRef d,int slot):player(slot),device(d) {
         if(device) CFRetain(device);
         key=DeviceId(device);
     }

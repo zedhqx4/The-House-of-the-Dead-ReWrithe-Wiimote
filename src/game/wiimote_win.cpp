@@ -1,5 +1,8 @@
 #include "game/wiimote.h"
 #ifdef _WIN32
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
 #include <windows.h>
 #include <bluetoothapis.h>
 #include <hidsdi.h>
