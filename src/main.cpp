@@ -11999,26 +11999,25 @@ int main(int argc, char* argv[])
         if (screen != Screen::Game) {
             // Translate each remote's own profile to frontend navigation. The IR pointer below is injected as
             // FrontendInput coordinates, never as SDL mouse motion or an operating-system cursor.
-            static constexpr uint16_t kWiiMenuConfirm = 0x2000, kWiiMenuPause = 0x4000, kWiiMenuBack = 0x8000;
+            // Front-end navigation has a fixed Wii Remote layout, separate from the remappable gameplay actions.
+            static constexpr uint16_t kWiiMenuConfirm = 0x2000, kWiiMenuBack = 0x8000;
             static uint16_t previousWiiMenu = 0;
             uint16_t currentWiiMenu = 0;
             if (!wiimotes.MenuInputSuppressed()) {
                 for (int p = 0; p < game::kWiimotePlayers; ++p) {
                     const auto& remote = wiimotes.Status().player[p];
                     if (!remote.connected || !remote.reserved) continue;
-                    const auto& bindings = wiimotes.settings.player[p].buttons;
                     currentWiiMenu |= remote.buttons & uint16_t(game::wii::Up | game::wii::Down |
                                                                  game::wii::Left | game::wii::Right);
-                    if (remote.buttons & bindings[2]) {
+                    // B accepts. With IR tracking, the same press clicks the item under this remote's cursor.
+                    if (remote.buttons & game::wii::B) {
                         if (wiimoteMenuPointer && p == wiimoteMenuPointerPlayer)
-                            wiimoteMenuClick = (remote.pressed & bindings[2]) != 0;
+                            wiimoteMenuClick = (remote.pressed & game::wii::B) != 0;
                         else
                             currentWiiMenu |= kWiiMenuConfirm;
                     }
-                    if (remote.buttons & bindings[3]) currentWiiMenu |= kWiiMenuPause;
-                    // B remains the familiar menu Back button unless the user assigned it to Confirm or Pause.
-                    if ((remote.buttons & game::wii::B) && bindings[2] != game::wii::B &&
-                        bindings[3] != game::wii::B)
+                    // A backs out. HOME, +, and the profile's gameplay action bindings do not drive menu navigation.
+                    if (remote.buttons & game::wii::A)
                         currentWiiMenu |= kWiiMenuBack;
                 }
             }
@@ -12028,7 +12027,7 @@ int main(int argc, char* argv[])
                 {game::wii::Down, SDL_SCANCODE_DOWN, SDLK_DOWN},
                 {game::wii::Left, SDL_SCANCODE_LEFT, SDLK_LEFT},
                 {game::wii::Right, SDL_SCANCODE_RIGHT, SDLK_RIGHT},
-                {uint16_t(kWiiMenuConfirm | kWiiMenuPause), SDL_SCANCODE_RETURN, SDLK_RETURN},
+                {kWiiMenuConfirm, SDL_SCANCODE_RETURN, SDLK_RETURN},
                 {kWiiMenuBack, SDL_SCANCODE_ESCAPE, SDLK_ESCAPE}
             };
             // Several buttons share Enter; combine their state before emitting transitions.
