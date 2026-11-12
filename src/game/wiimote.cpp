@@ -1,0 +1,411 @@
+#include "game/wiimote.h"
+#include "game/pause.h"
+#include "game/pads.h"
+#include "game/runtime.h"
+#include <algorithm>
+#include <cmath>
+#include <string>
+
+namespace hotd::game {
+namespace {
+using G = A::G;
+// These two helpers read the game's own player/mode fields. Keep the memory-layout access here rather
+// than spreading offsets through the HID backend, which must not know about game-state representation.
+int playerState(const Runtime& rt,int p) {
+    return int32_t(rt.mem.u32(Runtime::player_rec(p)));
+}
+int gameMode(const Runtime& rt) {
+    return rt.mem.at<int16_t>(G::game_mode);
+}
+}
+
+Wiimotes::Wiimotes() : backend_(wii::CreateBackend()) {}
+Wiimotes::~Wiimotes() = default;
+
+// Settings are loaded before enabling discovery, so the backend starts with the user's scan policy and bindings.
+bool Wiimotes::Load(const std::string& file) {
+    const bool ok=settings.Load(file);
+    Configure();
+    if(settings.enabled && backend_) backend_->Scan();
+    return ok;
+}
+bool Wiimotes::Save(const std::string& file) const {
+    return settings.Save(file);
+}
+void Wiimotes::Configure() {
+    if(backend_) backend_->Enable(settings.enabled,settings.continuous);
+}
+void Wiimotes::Scan() {
+    if(!backend_) return;
+    settings.enabled=true;
+    Configure();
+    backend_->Scan();
+}
+void Wiimotes::Disconnect(int player) {
+    if(backend_ && player>=0 && player<kWiimotePlayers) backend_->Disconnect(player);
+}
+// A player swap must move the complete logical seat, not just the device handle: calibration, held state,
+// smoothing history and pending rumble all belong to the player profile currently occupying that seat.
+void Wiimotes::SwapPlayers() {
+    if(!backend_) return;
+    backend_->SwapPlayers();
+    std::swap(settings.player[0],settings.player[1]);
+    std::swap(gamePlayer[0],gamePlayer[1]);
+    std::swap(snapshot_.player[0],snapshot_.player[1]);
+    std::swap(lost_[0],lost_[1]);
+    std::swap(seen_[0],seen_[1]);
+    std::swap(smoothedAim_[0],smoothedAim_[1]);
+    std::swap(hasAim_[0],hasAim_[1]);
+    std::swap(rumbleUntil_[0],rumbleUntil_[1]);
+    std::swap(rumbleActive_[0],rumbleActive_[1]);
+    std::swap(rumbleLives_[0],rumbleLives_[1]);
+    std::swap(rumbleScore_[0],rumbleScore_[1]);
+    std::swap(rumbleReloads_[0],rumbleReloads_[1]);
+    std::swap(rumbleSeen_[0],rumbleSeen_[1]);
+}
+// Called from the game/front-end update. The backend owns asynchronous I/O; this method only snapshots it.
+void Wiimotes::Refresh() {
+    if(!backend_) return;
+    const auto fresh=backend_->Poll();
+    snapshot_.scanning=fresh.scanning;
+    snapshot_.message=fresh.message;
+    for(int p=0;p<kWiimotePlayers;++p) {
+        // Preserve a press edge until the game consumes it with ClearEdges(); a fast HID report must not
+        // disappear merely because another frontend refresh happened before the gameplay update.
+        const auto pending=snapshot_.player[p].pressed;
+        snapshot_.player[p]=fresh.player[p];
+        snapshot_.player[p].pressed|=pending;
+        if(!fresh.player[p].connected) snapshot_.player[p].pressed=0;
+    }
+    // PulseRumble stores an expiry time; only send a motor transition when its desired state changes.
+    // This avoids repeatedly writing identical output reports every frame.
+    const auto now=std::chrono::steady_clock::now();
+    for(int p=0;p<kWiimotePlayers;++p) {
+        const bool want=settings.enabled && settings.rumble && snapshot_.player[p].connected &&
+                        now<rumbleUntil_[p];
+        if(!want) rumbleUntil_[p]={};
+        if(want!=rumbleActive_[p]) {
+            backend_->SetRumble(p,want);
+            rumbleActive_[p]=want;
+        }
+    }
+}
+void Wiimotes::ClearEdges() {
+    for(auto& remote:snapshot_.player) remote.pressed=0;
+}
+// Extend an existing pulse rather than queueing pulses. A later event can lengthen vibration, never shorten it.
+void Wiimotes::PulseRumble(int player,int durationMs) {
+    if(player<0 || player>=kWiimotePlayers || durationMs<=0 || !settings.enabled || !settings.rumble)
+        return;
+    const auto until=std::chrono::steady_clock::now()+std::chrono::milliseconds(std::clamp(durationMs,1,500));
+    if(until>rumbleUntil_[player]) rumbleUntil_[player]=until;
+}
+// Calibration only starts for an enabled, live, assigned remote; otherwise the UI would wait for input
+// from a device that cannot supply a trustworthy pair of IR points.
+bool Wiimotes::StartCalibration(int player) {
+    if(player<0 || player>=kWiimotePlayers || !settings.enabled) return false;
+    const auto& remote=snapshot_.player[player];
+    if(!remote.connected || !remote.reserved) return false;
+    calibrationPlayer_=player;
+    calibrationStep_=0;
+    calibrationFailed_=false;
+    calibrationConsumed_.fill(false);
+    if(!(remote.buttons&wii::B)) calibrationMenuBlockedPlayer_=-1;
+    snapshot_.player[player].pressed=0;
+    return true;
+}
+void Wiimotes::CancelCalibration() {
+    if(calibrationPlayer_>=0) calibrationMenuBlockedPlayer_=calibrationPlayer_;
+    calibrationPlayer_=-1;
+    calibrationStep_=0;
+}
+// The frontend calls this every frame while the calibration page is active. A press edge captures one
+// sample only when the IR camera currently sees both sensor-bar points.
+void Wiimotes::CaptureCalibration() {
+    calibrationConsumed_.fill(false);
+    if(calibrationMenuBlockedPlayer_>=0) {
+        const auto& blocked=snapshot_.player[calibrationMenuBlockedPlayer_];
+        if(!blocked.connected || !(blocked.buttons&wii::B))
+            calibrationMenuBlockedPlayer_=-1;
+    }
+    if(calibrationPlayer_<0) return;
+    auto& remote=snapshot_.player[calibrationPlayer_];
+    if(!remote.connected || !remote.reserved) {
+        CancelCalibration();
+        return;
+    }
+    // Consume this player's controls even on the frame that completes calibration.
+    calibrationConsumed_[calibrationPlayer_]=true;
+    if(remote.pressed&wii::B) {
+        CancelCalibration();
+        remote.pressed=0;
+        return; // B backs out of calibration.
+    }
+    // Samples are collected in the same clockwise order as CalibrationTarget(): TL, TR, BR, BL.
+    if((remote.pressed&wii::A) && remote.tracking) {
+        calibrationSamples_[calibrationStep_]=remote.raw;
+        if(++calibrationStep_==4) {
+            auto& calibration=settings.player[calibrationPlayer_].calibration;
+            if(calibration.Fit(calibrationSamples_)) {
+                calibrated=true;
+                calibrationFailed_=false;
+                calibrationMenuBlockedPlayer_=calibrationPlayer_;
+                calibrationPlayer_=-1;
+                calibrationStep_=0;
+            } else {
+                calibrationStep_=0;
+                calibrationFailed_=true;
+            }
+        }
+    }
+    remote.pressed=0;
+}
+bool Wiimotes::CalibrationTarget(float& x,float& y) const {
+    if(calibrationPlayer_ < 0) return false;
+    static constexpr float targets[4][2]={{.15f,.15f},{.85f,.15f},{.85f,.85f},{.15f,.85f}};
+    x=targets[calibrationStep_][0];
+    y=targets[calibrationStep_][1];
+    return true;
+}
+std::vector<std::string> Wiimotes::CalibrationLines() const {
+    if(calibrationPlayer_ < 0) return {};
+    static const char* names[4]={"top left","top right","bottom right","bottom left"};
+    std::vector<std::string> lines={
+        "WII REMOTE CALIBRATION",
+        "",
+        "Player "+std::to_string(calibrationPlayer_+1)+": point at the "+names[calibrationStep_]+" target",
+        "Press A when both IR dots are visible",
+        "B or Esc: cancel"
+    };
+    if(calibrationFailed_) lines.push_back("Calibration geometry invalid; repeat the four points");
+    return lines;
+}
+
+// Start a one-button capture for one of the four gameplay actions. The actual assignment is validated
+// by AssignButton(), which prevents two actions on the same player's remote from sharing a physical button.
+bool Wiimotes::BeginBinding(int player,int action) {
+    if(player<0 || player>=kWiimotePlayers || action<0 || action>=4 || !settings.enabled) return false;
+    const auto& remote=snapshot_.player[player];
+    if(!remote.connected || !remote.reserved) return false;
+    bindingPlayer_=player;
+    bindingAction_=action;
+    bindingMessagePlayer_=player;
+    bindingMessageAction_=action;
+    bindingMessage_.clear();
+    bindingChanged=false;
+    snapshot_.player[player].pressed=0;
+    return true;
+}
+
+// Capture only rising edges, then suppress the captured button until it is released. Without that release
+// gate, the same press could both change the binding and activate the newly-bound menu/game action.
+void Wiimotes::CaptureBinding() {
+    if(bindingMenuBlockedPlayer_>=0) {
+        const auto& blocked=snapshot_.player[bindingMenuBlockedPlayer_];
+        if(!blocked.connected || !(blocked.buttons&bindingMenuBlockedButton_)) {
+            bindingMenuBlockedPlayer_=-1;
+            bindingMenuBlockedButton_=0;
+        }
+    }
+    if(bindingPlayer_<0) return;
+    auto& remote=snapshot_.player[bindingPlayer_];
+    if(!remote.connected || !remote.reserved) {
+        bindingMessage_="Remote disconnected";
+        bindingPlayer_=bindingAction_=-1;
+        remote.pressed=0;
+        return;
+    }
+    for(const uint16_t button:wii::Bindable) {
+        if(!(remote.pressed&button)) continue;
+        auto& profile=settings.player[bindingPlayer_];
+        if(!wii::AssignButton(profile,bindingAction_,button)) {
+            static const char* const names[]={"Fire","Reload","Confirm","Start / Pause"};
+            int other=-1;
+            for(int i=0;i<4;++i)
+                if(i!=bindingAction_ && profile.buttons[i]==button) { other=i; break; }
+            bindingMessage_=other>=0 ? std::string("Already used by ")+names[other] :
+                                       std::string("Button unavailable");
+            remote.pressed=0;
+            return;
+        }
+        bindingMessage_.clear();
+        bindingMenuBlockedPlayer_=bindingPlayer_;
+        bindingMenuBlockedButton_=button;
+        bindingPlayer_=bindingAction_=-1;
+        bindingChanged=true;
+        remote.pressed=0;
+        return;
+    }
+}
+
+void Wiimotes::CancelBinding() {
+    if(bindingPlayer_>=0 && bindingPlayer_<kWiimotePlayers)
+        snapshot_.player[bindingPlayer_].pressed=0;
+    bindingPlayer_=bindingAction_=-1;
+    bindingMessage_.clear();
+    bindingMessagePlayer_=bindingMessageAction_=-1;
+}
+
+bool Wiimotes::BindingActive(int player,int action) const {
+    return bindingPlayer_==player && bindingAction_==action;
+}
+
+std::string Wiimotes::BindingText(int player,int action) const {
+    if(BindingActive(player,action))
+        return bindingMessage_.empty() ? std::string("Press a button...") : bindingMessage_;
+    if(bindingMessagePlayer_==player && bindingMessageAction_==action && !bindingMessage_.empty())
+        return bindingMessage_;
+    if(player<0 || player>=kWiimotePlayers || action<0 || action>=4) return "Unknown";
+    return wii::ButtonName(settings.player[player].buttons[action]);
+}
+
+// The menus have one shared hand cursor, so the first connected remote with valid IR tracking drives it.
+// Gameplay aiming below remains independent and is maintained separately for every player.
+bool Wiimotes::MenuPointer(float& x,float& y,int* player) {
+    if(!settings.enabled || MenuInputSuppressed()) {
+        hasMenuAim_.fill(false);
+        return false;
+    }
+    for(int p=0;p<kWiimotePlayers;++p) {
+        const auto& remote=snapshot_.player[p];
+        if(!remote.connected || !remote.reserved || !remote.tracking) {
+            hasMenuAim_[p]=false;
+            continue;
+        }
+        wii::AimPoint aim=remote.raw;
+        const auto& profile=settings.player[p];
+        if(profile.calibration.calibrated)
+            profile.calibration.Apply(remote.raw,aim);
+        const float alpha=profile.smoothing==0?1.0f:profile.smoothing==1?0.65f:0.35f;
+        if(!hasMenuAim_[p]) {
+            menuAim_[p]=aim;
+            hasMenuAim_[p]=true;
+        } else {
+            menuAim_[p].x+=alpha*(aim.x-menuAim_[p].x);
+            menuAim_[p].y+=alpha*(aim.y-menuAim_[p].y);
+        }
+        x=float(std::clamp(menuAim_[p].x,0.0,1.0));
+        y=float(std::clamp(menuAim_[p].y,0.0,1.0));
+        if(player) *player=p;
+        return true; // The frontend draws its own hand cursor; no SDL / OS mouse is generated.
+    }
+    return false;
+}
+
+// Held state is separate from press edges: game modes that support automatic fire/hold-to-skip need
+// the current button level, while menus and pause use the one-shot 'pressed' mask.
+bool Wiimotes::fireHeld(int player) const {
+    if(player<0 || player>=kWiimotePlayers || !settings.enabled) return false;
+    if(player==calibrationPlayer_ || player==calibrationMenuBlockedPlayer_ || calibrationConsumed_[player]) return false;
+    const auto& remote=snapshot_.player[player];
+    return remote.connected && (remote.buttons&settings.player[player].buttons[0])!=0;
+}
+// Translate each remote into the existing light-gun and pause input structures. This keeps the game's
+// normal input consumers unchanged and lets Wii Remotes coexist with pads and other light guns.
+void Wiimotes::Apply(Runtime& rt,GunState guns[],Pause& pause,PauseInput& pin,int width,int height) {
+    if(!settings.enabled) {
+        rumbleSeen_.fill(false);
+        return;
+    }
+    const bool paused=pause.paused();
+    const int mode=gameMode(rt);
+    for(int p=0;p<kWiimotePlayers;++p) {
+        auto& remote=snapshot_.player[p];
+        if(!remote.connected || !remote.reserved) {
+            rumbleSeen_[p]=false;
+            if(p==calibrationPlayer_) CancelCalibration();
+            if(lostPause && seen_[p] && !lost_[p] && mode==4 && playerState(rt,gamePlayer[p])==5 && !paused)
+                pause.focus(false);
+            lost_[p]=true;
+            remote.pressed=0;
+            continue;
+        }
+        lost_[p]=false;
+        seen_[p]=true;
+        auto& profile=settings.player[p];
+        if(p==calibrationPlayer_ || p==calibrationMenuBlockedPlayer_ || calibrationConsumed_[p]) {
+            remote.pressed=0;
+            continue; // calibration input must never become in-game shots / reloads
+        }
+        wii::AimPoint aim=remote.raw;
+        if(profile.calibration.calibrated)
+            profile.calibration.Apply(remote.raw,aim);
+        // A calibrated point is mapped into screen space, smoothed per seat, then allowed a 5% margin
+        // outside the viewport so aiming at screen edges does not hard-stop the cursor prematurely.
+        if(remote.tracking) {
+            const float alpha=profile.smoothing==0?1.0f:profile.smoothing==1?0.65f:0.35f;
+            if(!hasAim_[p]) {
+                smoothedAim_[p]=aim;
+                hasAim_[p]=true;
+            } else {
+                smoothedAim_[p].x+=alpha*(aim.x-smoothedAim_[p].x);
+                smoothedAim_[p].y+=alpha*(aim.y-smoothedAim_[p].y);
+            }
+            const float margin=float(height)*0.05f;
+            guns[p].x=std::clamp(float(smoothedAim_[p].x)*float(width),-margin,float(width)+margin);
+            guns[p].y=std::clamp(float(smoothedAim_[p].y)*float(height),-margin,float(height)+margin);
+            guns[p].pointer=false;
+        } else {
+            hasAim_[p]=false;
+        }
+
+        const uint16_t edge=remote.pressed;
+        if(paused) {
+            // D-pad remains menu navigation. A is an unconditional pause-menu accept fallback even when
+            // the configurable Confirm action is assigned elsewhere; Minus remains a pause-toggle fallback.
+            pin.up=pin.up || ((edge& wii::Up)!=0);
+            pin.down=pin.down || ((edge& wii::Down)!=0);
+            pin.activate=pin.activate || ((edge&profile.buttons[2])!=0) || ((edge&wii::A)!=0);
+            pin.toggle=pin.toggle || ((edge&profile.buttons[3])!=0) || ((edge&wii::Minus)!=0);
+        } else {
+            if(edge&profile.buttons[0]) guns[p].trigger=true;
+            if(edge&profile.buttons[1]) guns[p].reload=true;
+            // Start/Pause is contextual: it joins/exits attract outside active play and toggles pause in-game.
+            if(edge&profile.buttons[3]) {
+                const int gp=gamePlayer[p];
+                if(mode==4 && playerState(rt,gp)==5) pin.toggle=true;
+                else if(onJoin) onJoin(p);
+                else rt.player_join(gp);
+            }
+        }
+        // Retain the held state for game modes which support hold-to-skip / automatic fire.
+        remote.pressed=0;
+    }
+
+    // Snapshot the game counters after input mapping. A newly connected remote gets a baseline first,
+    // preventing its first frame from being misread as damage, a hit, or a reload event.
+    // Mirror the game's native feedback triggers from Pads::apply, not input-button presses.
+    // The Wii Remote has a binary motor, so use the same event and duration without intensity.
+    for(int p=0;p<kWiimotePlayers;++p) {
+        const auto& remote=snapshot_.player[p];
+        if(!remote.connected || !remote.reserved) {
+            rumbleSeen_[p]=false;
+            continue;
+        }
+        const int gp=gamePlayer[p];
+        const uint32_t rec=Runtime::player_rec(gp);
+        const int lives=int32_t(rt.mem.u32(rec+0x0C));
+        const int score=int32_t(rt.mem.u32(rec+0x08));
+        const uint32_t reloads=rt.reloadsIn[gp];
+        if(!rumbleSeen_[p]) {
+            rumbleLives_[p]=lives;
+            rumbleScore_[p]=score;
+            rumbleReloads_[p]=reloads;
+            rumbleSeen_[p]=true;
+            continue;
+        }
+        if(settings.rumble && playerState(rt,gp)==5) {
+            if(lives<rumbleLives_[p])
+                PulseRumble(p,300);       // took damage
+            else if(score>rumbleScore_[p])
+                PulseRumble(p,70);        // hit an enemy
+            else if(reloads!=rumbleReloads_[p])
+                PulseRumble(p,90);         // game registered a reload
+        }
+        rumbleLives_[p]=lives;
+        rumbleScore_[p]=score;
+        rumbleReloads_[p]=reloads;
+    }
+}
+
+} // namespace hotd::game

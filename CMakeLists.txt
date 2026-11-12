@@ -102,6 +102,8 @@ set(HOTD_GAME_SOURCES
     src/game/pause.cpp
     src/game/pads.cpp
     src/game/lightguns.cpp
+    src/game/wiimote_protocol.cpp
+    src/game/wiimote.cpp
     src/game/pads_test.cpp
     src/game/keybinds.cpp
     src/game/pad_prompts.cpp
@@ -368,8 +370,22 @@ file(CONFIGURE OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/generated/dispatch_arcade.inc 
 target_include_directories(hotd_flags INTERFACE ${CMAKE_CURRENT_BINARY_DIR}/generated)
 configure_file(src/res/hotd_version.h.in ${CMAKE_CURRENT_BINARY_DIR}/generated/hotd_version.h @ONLY)
 target_link_libraries(hotd_flags INTERFACE hotd_engine hotd_logic)
+# The protocol/game adapter is shared; only the HID transport differs by OS. Android deliberately gets a no-op
+# backend because a native Android transport is not implemented.
 if(WIN32)
-    target_link_libraries(hotd_flags INTERFACE winhttp)   # util/update_check.cpp
+    target_link_libraries(hotd_flags INTERFACE winhttp hid setupapi bthprops)   # update check and native Wii Remote HID
+    target_sources(hotd_game_obj PRIVATE src/game/wiimote_win.cpp)
+elseif(APPLE)
+    target_sources(hotd_game_obj PRIVATE src/game/wiimote_mac.cpp)
+    target_link_libraries(hotd_flags INTERFACE "-framework IOKit" "-framework CoreFoundation")
+elseif(ANDROID)
+    target_sources(hotd_game_obj PRIVATE src/game/wiimote_unavailable.cpp)
+else()
+    target_sources(hotd_game_obj PRIVATE src/game/wiimote_linux.cpp)
+endif()
+if(NOT ANDROID)
+    add_executable(hotd_wiimote_test tests/wiimote_test.cpp src/game/wiimote_protocol.cpp)
+    target_include_directories(hotd_wiimote_test PRIVATE src)
 endif()
 # Experimental modes (user 2026-11-03: not in a public release until they are polished; docs/porting.md "Experimental
 # modes"): ON (development builds, build\Release and the private portable): the unreleased modes' menu items, command-line
